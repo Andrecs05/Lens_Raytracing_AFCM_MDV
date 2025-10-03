@@ -1,5 +1,5 @@
 def main():
-    print("Hello from lens-raytracing-afcm-mdv!")
+    print("")
 
 
 if __name__ == "__main__":
