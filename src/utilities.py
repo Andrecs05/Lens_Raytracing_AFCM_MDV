@@ -27,7 +27,9 @@ def gal_telescope_transfer_matrix(n, R1o, R2o, do, fo, R1e, R2e, de, fe):
     """
 
     Mo = thick_lens_transfer_matrix(R1o, R2o, do, n)
+    print("Objective transfer matrix:\n", Mo, "Determinant: ", np.linalg.det(Mo))
     Me = thick_lens_transfer_matrix(R1e, R2e, de, n)
+    print("Eyepiece transfer matrix:\n", Me, "Determinant: ", np.linalg.det(Me))
     D_oe = fo + fe
     MD = translation_matrix(D_oe, 1)
     MT = Me @ MD @ Mo
@@ -93,7 +95,9 @@ def get_doublet_parameters(img_array, n1, n1_o, n2_o, n1_e, n2_e, R1_o, R2_o, R3
     H, W = img_array.shape 
 
     M_o, f_o = doublet_matrix(n1, n1_o, n2_o, R1_o, R2_o, R3_o, d1_o, d2_o)
+    print("Objective transfer matrix:\n", M_o, "Determinant: ", np.linalg.det(M_o))
     M_e, f_e = doublet_matrix(n1_e, n2_e, n1, R1_e, R2_e, R3_e, d1_e, d2_e)
+    print("Eyepiece transfer matrix:\n", M_e, "Determinant: ", np.linalg.det(M_e))
     d = f_o + f_e
     M_T = M_e @ translation_matrix(d, 1) @ M_o
 

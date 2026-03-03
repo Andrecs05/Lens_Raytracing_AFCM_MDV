@@ -32,6 +32,29 @@ def doublet_matrix(n1, n2, n3, R1, R2, R3, d1, d2):
 
     return MT, f
 
+def doublet_matrix_2(n1, n2, n3, R1, R2, R3, d1, d2):
+    """
+    Calculate the transfer matrix for a doublet lens system.
+
+    Args:
+        n1 : float - Refractive index of the medium before the first lens
+        n2 : float - Refractive index of the first lens
+        n3 : float - Refractive index of the second lens
+        R1 : float - Radius of curvature of the first surface (positive if center to the right)
+        R2 : float - Radius of curvature of the second surface (positive if center to the right)
+        R3 : float - Radius of curvature of the third surface (positive if center to the right)
+        d1 : float - Width of the first lens
+        d2 : float - Width of the second lens
+    """
+    M1 = refraction_matrix(n1, n2, R1)
+    M2 = translation_matrix(d1, n2)
+    M3 = refraction_matrix(n2, n3, R2)
+    M4 = translation_matrix(d2, n3)
+    M5 = refraction_matrix(n3, n1, R3)
+
+    MT = M5 @ M4 @ M3 @ M2 @ M1
+    return MT
+
 def translation_matrix(d, n):
     """
     Calculate the translation matrix for a distance z.
@@ -101,3 +124,13 @@ def interface_matrix(n1, n2):
     """
     M = np.array([[1, 0], [0, n1 / n2]])
     return M
+
+def refraction_matrix(n_in, n_out, R):
+    """
+    Refraction at spherical surface (y, theta formalism)
+    """
+    return np.array([
+        [1, 0],
+        [(n_in - n_out) / R, 1]
+    ], dtype=float)
+
