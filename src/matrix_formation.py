@@ -24,7 +24,7 @@ def doublet_matrix(n1, n2, n3, R1, R2, R3, d1, d2):
     MT = M5 @ M4 @ M3 @ M2 @ M1
 
     C = MT[1,0]
-    f = -1/C
+    f = -1/C 
 
     return MT, f
 
