@@ -26,7 +26,7 @@ def doublet_matrix(n1, n2, n3, R1, R2, R3, d1, d2):
     C = MT[1,0]
     f = -1/C 
 
-    return MT, f
+    return MT
 
 def triplet_matrix(n1, n2, n3, n4, R1, R2, R3, R4, d1, d2, d3):
     """
@@ -58,7 +58,7 @@ def triplet_matrix(n1, n2, n3, n4, R1, R2, R3, R4, d1, d2, d3):
     C = MT[1,0]
     f = -1/C 
 
-    return MT, f
+    return MT
 
 def translation_matrix(d, n):
     """
