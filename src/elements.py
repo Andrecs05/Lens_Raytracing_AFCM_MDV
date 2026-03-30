@@ -59,6 +59,35 @@ class Doublet:
     def focal_length(self):  # Calculate the focal length of the doublet using the transfer matrix
         return 1 / (-self.matrix()[1,0])
     
+class Triplet:
+    def __init__(self, R1, R2, R3, R4, d1, d2, d3, n1, n2, n3):
+        '''
+        R1 : float - Radius of curvature of the first surface (positive if center to the right)
+        R2 : float - Radius of curvature of the second surface (positive if center to the right)
+        R3 : float - Radius of curvature of the third surface (positive if center to the right)
+        R4 : float - Radius of curvature of the fourth surface (positive if center to the right)
+        d1 : float - Thickness of the first lens
+        d2 : float - Thickness of the second lens
+        d3 : float - Thickness of the third lens
+        n1 : float - Refractive index of the first lens material
+        n2 : float - Refractive index of the second lens material
+        n3 : float - Refractive index of the third lens material
+        '''
+        self.R1 = R1
+        self.R2 = R2
+        self.R3 = R3
+        self.R4 = R4
+        self.d1 = d1
+        self.d2 = d2
+        self.d3 = d3
+        self.n1 = n1
+        self.n2 = n2
+        self.n3 = n3
+    def matrix(self):       # Calculate the transfer matrix for the triplet using the provided parameters
+        return triplet_matrix(self.R1, self.R2, self.R3, self.R4, self.d1, self.d2, self.d3, self.n1, self.n2, self.n3)
+    def focal_length(self): # Calculate the focal length of the triplet using the transfer matrix
+        return 1 / (-self.matrix()[1,0])
+    
 class FreeSpace:
     def __init__(self, d, n=1):
         '''
