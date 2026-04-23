@@ -7,7 +7,7 @@ class ThickLens:
         R1 : float - Radius of curvature of the first surface (positive if center to the right)
         R2 : float - Radius of curvature of the second surface (positive if center to the right)
         d : float - Thickness of the lens
-        n : float - Refractive index of the lens material
+        n : float - Refractive index of the lens material for lambda = 550 nm
         '''
         self.R1 = R1
         self.R2 = R2

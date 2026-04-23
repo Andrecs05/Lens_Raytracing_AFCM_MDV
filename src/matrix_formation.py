@@ -1,5 +1,69 @@
 import numpy as np
 
+def translation_matrix(d, n):
+    """
+    Calculate the translation matrix for a distance z.
+
+    Args:
+        z : float - Distance to translate
+
+    Returns:
+        M : numpy.ndarray - 2x2 translation matrix
+    """
+    M = np.array([[1, d/n],
+                  [0, 1]])
+    return M
+
+def reflection_matrix(R):
+    """
+    Reflection at a spherical mirror (paraxial, y-theta formalism)
+
+    R : radius of curvature (positive if center to the right)
+    """
+    return np.array([
+        [1, 0],
+        [-2/R, 1]
+    ])
+
+def refraction_matrix(n_in, n_out, R):
+    """
+    Refraction at spherical surface (y, theta formalism)
+    """
+    return np.array([
+        [1, 0],
+        [(n_in - n_out) / R, 1]
+    ], dtype=float)
+
+def thin_lens_transfer_matrix(f):
+    """
+    Calculate the transfer matrix for a thin lens.
+
+    Args:
+        f : float - Focal length of the lens
+    Returns:
+        M : numpy.ndarray - 2x2 transfer matrix for the thin lens
+    """
+    M = np.array([[1, 0], [-1/f, 1]])
+    return M
+
+def thick_lens_transfer_matrix(R1, R2, d, n):
+    """
+    Calculate the transfer matrix for a thick lens.
+
+    Args:
+        R1 : float - Radius of curvature of the first surface (positive if center to the right)
+        R2 : float - Radius of curvature of the second surface (positive if center to the right)
+        d : float - Thickness of the lens
+        n : float - Refractive index of the lens material
+    
+    Returns:
+        M : numpy.ndarray - 2x2 transfer matrix for the thick lens
+    """
+    M1 = refraction_matrix(1, n, R1)
+    M_prop = translation_matrix(d, n)
+    M2 = refraction_matrix(n, 1, R2)
+    M = M2 @ M_prop @ M1
+    return M
 
 def doublet_matrix(n1, n2, n3, R1, R2, R3, d1, d2):
     """
@@ -59,69 +123,3 @@ def triplet_matrix(n1, n2, n3, n4, R1, R2, R3, R4, d1, d2, d3):
     f = -1/C 
 
     return MT
-
-def translation_matrix(d, n):
-    """
-    Calculate the translation matrix for a distance z.
-
-    Args:
-        z : float - Distance to translate
-
-    Returns:
-        M : numpy.ndarray - 2x2 translation matrix
-    """
-    M = np.array([[1, d/n],
-                  [0, 1]])
-    return M
-
-def thick_lens_transfer_matrix(R1, R2, d, n):
-    """
-    Calculate the transfer matrix for a thick lens.
-
-    Args:
-        R1 : float - Radius of curvature of the first surface (positive if center to the right)
-        R2 : float - Radius of curvature of the second surface (positive if center to the right)
-        d : float - Thickness of the lens
-        n : float - Refractive index of the lens material
-    
-    Returns:
-        M : numpy.ndarray - 2x2 transfer matrix for the thick lens
-    """
-    M1 = refraction_matrix(1, n, R1)
-    M_prop = translation_matrix(d, n)
-    M2 = refraction_matrix(n, 1, R2)
-    M = M2 @ M_prop @ M1
-    return M
-
-def thin_lens_transfer_matrix(f):
-    """
-    Calculate the transfer matrix for a thin lens.
-
-    Args:
-        f : float - Focal length of the lens
-    Returns:
-        M : numpy.ndarray - 2x2 transfer matrix for the thin lens
-    """
-    M = np.array([[1, 0], [-1/f, 1]])
-    return M
-
-def reflection_matrix(R):
-    """
-    Reflection at a spherical mirror (paraxial, y-theta formalism)
-
-    R : radius of curvature (positive if center to the right)
-    """
-    return np.array([
-        [1, 0],
-        [-2/R, 1]
-    ])
-
-def refraction_matrix(n_in, n_out, R):
-    """
-    Refraction at spherical surface (y, theta formalism)
-    """
-    return np.array([
-        [1, 0],
-        [(n_in - n_out) / R, 1]
-    ], dtype=float)
-

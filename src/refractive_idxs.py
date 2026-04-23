@@ -1,5 +1,31 @@
 import numpy as np
 
+def refractive_index(lambda_um, material):
+    """
+    Calculates the refractive index n of a material for a given wavelength using the Sellmeier equation.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm)
+        material (str): Name of the material
+
+    Returns:
+        n (float or ndarray): Refractive index
+    """
+    if material == "NBK7":
+        return refractive_index_NBK7(lambda_um)
+    elif material == "NBAF10":
+        return refractive_index_NBAF10(lambda_um)
+    elif material == "NSF6HT":
+        return refractive_index_NSF6HT(lambda_um)
+    elif material == "NSF2":
+        return refractive_index_NSF2(lambda_um)
+    elif material == "BaF2":
+        return refractive_index_BaF2(lambda_um)
+    elif material == "CaF2":
+        return refractive_index_CaF2(lambda_um)
+    else:
+        raise ValueError("Material not recognized")
+
 def refractive_index_NBK7(lambda_um):
     """
     Calculates the refractive index n of the material NBK-7 for a given wavelength using the Sellmeier equation.
