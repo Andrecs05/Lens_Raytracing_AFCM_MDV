@@ -1,341 +1,197 @@
 import numpy as np
-from PIL import Image
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import griddata
+from src.refractive_idxs import *
 from src.matrix_formation import *
 
 
-def gal_telescope_transfer_matrix(n, R1o, R2o, do, fo, R1e, R2e, de, fe):
-    """
-    Calculate the transfer matrix for a Galilean telescope.
 
-    Args:
-        n1 : float - Refractive index of the medium before the first lens
-        n2 : float - Refractive index of the medium after the first lens
-        R1o : float - Radius of curvature of the first lens (positive if center to the right)
-        R2o : float - Radius of curvature of the second lens (positive if center to the right)
-        do : float - Distance between the two lenses
-        fo : float - Focal length of the first lens
-        R1e : float - Radius of curvature of the eyepiece lens (positive if center to the right)
-        R2e : float - Radius of curvature of the eyepiece lens (positive if center to the right)
-        de : float - Distance between the eyepiece and image plane
-        fe : float - Focal length of the eyepiece
+def image_to_rays_0_angle(image_array, pixel_size, channel=0):
+    '''
+    Convert a 2D image array into a list of rays for ray tracing.
+    
+    Parameters:
+    image_array : 2D numpy array - The input image where each pixel represents an intensity value.
+    pixel_size : float - The physical size of each pixel in the same units as the ray tracing system.
+    channel : int - The channel index to extract intensity values from (default is 0).
     
     Returns:
-        M : numpy.ndarray - 2x2 transfer matrix for the Galilean telescope
-    """
+    rays : list of tuples - A list of rays represented as tuples (x, y, angle, intensity) where:
+        x : float - The x-coordinate of the ray's origin
+        y : float - The y-coordinate of the ray's origin
+        angle : float - The angle of the ray with respect to the optical axis (in radians)
+        intensity : float - The intensity of the ray based on the pixel value
+    '''
+    rays = []
+    height, width, channels = image_array.shape
+    for i in range(height):
+        for j in range(width):
+            intensity = image_array[i, j, channel]  # Assuming the first channel represents intensity
+            if intensity > 0:  # Only consider pixels with non-zero intensity
+                x = j * pixel_size  # Calculate x-coordinate based on pixel index and size
+                y = i * pixel_size  # Calculate y-coordinate based on pixel index and size
+                angle = 0  # Initial angle of the ray (can be modified later based on the system)
+                rays.append((x, y, angle, intensity))  # Append the ray with its intensity for further processing
+    # Center the rays around the optical axis by adjusting their x and y coordinates
+    rays = [(x - (width * pixel_size) / 2, y - (height * pixel_size) / 2, angle, intensity) for (x, y, angle, intensity) in rays]
+    return rays
 
-    Mo = thick_lens_transfer_matrix(R1o, R2o, do, n)
-    print("Objective transfer matrix:\n", Mo, "Determinant: ", np.linalg.det(Mo))
-    Me = thick_lens_transfer_matrix(R1e, R2e, de, n)
-    print("Eyepiece transfer matrix:\n", Me, "Determinant: ", np.linalg.det(Me))
-    D_oe = fo + fe
-    MD = translation_matrix(D_oe, 1)
-    MT = Me @ MD @ Mo
-    return MT
-
-def transform_coords(x, y, theta, M):
-    """
-    Transform a pixel using the transfer matrix.
-
-    Args:
-        center_y : float - Y-coordinate of the center
-        center_x : float - X-coordinate of the center
-        pixel : numpy.ndarray - 2D array representing the pixel (x, y)
-        r : float - Radial distance
-        theta : float - Angle in radians
-        M : numpy.ndarray - 2x2 transfer matrix
-
-    Returns:
-        transformed_pixel : numpy.ndarray - Transformed pixel (x', y')
-        final_state : numpy.ndarray - Final state after transformation
-    """
-    r = np.sqrt(x**2 + y**2)
-    alpha = np.arctan2(y, x)
-    initial_state = np.array([r, theta])
-
-    final_state = M @ initial_state
-    r_f = final_state[0]
-    x_f = r_f * np.cos(alpha)
-    y_f = r_f * np.sin(alpha)
-
-    return x_f, y_f, final_state
-
-def get_doublet_parameters(img_array, n1, n1_o, n2_o, n1_e, n2_e, R1_o, R2_o, R3_o, d1_o, d2_o,
-                           R1_e, R2_e, R3_e, d1_e, d2_e):
-    """
-    Calculate the parameters for a doublet lens system.
-
-    Args:
-        img_array : numpy.ndarray - Input image array
-        n1 : float - Refractive index of the medium before the first lens
-        n1_o : float - Refractive index of the first lens
-        n2_o : float - Refractive index of the second lens
-        n1_e : float - Refractive index of the eyepiece lens
-        n2_e : float - Refractive index of the medium after the eyepiece lens
-        R1_o, R2_o, R3_o : float - Radii of curvature for the objective lens
-        d1_o, d2_o : float - Widths for the objective lens
-        R1_e, R2_e, R3_e : float - Radii of curvature for the eyepiece lens
-        d1_e, d2_e : float - Widths for the eyepiece lens
-        f_o : float - Focal length of the objective lens (in mm)
-        f_e : float - Focal length of the eyepiece lens (in mm)
-
-    Returns:
-        fov_i : float - Initial field of view
-        f_o : float - Focal length of the objective lens (in mm)
-        f_e : float - Focal length of the eyepiece lens (in mm)
-        i_angular_pixel_size : float - Initial angular pixel size in the image plane
-        i_lateral_pixel_size : float - Initial lateral pixel size in the image plane
-        output_img_size : tuple - Size of the output image (height, width)
-        M_T : numpy.ndarray - Transfer matrix for the doublet lens system
-        M : float - Magnification factor
-    """
-
-    H, W = img_array.shape 
-
-    M_o, f_o = doublet_matrix(n1, n1_o, n2_o, R1_o, R2_o, R3_o, d1_o, d2_o)
-    print("Objective transfer matrix:\n", M_o, "Determinant: ", np.linalg.det(M_o))
-    M_e, f_e = doublet_matrix(n1_e, n2_e, n1, R1_e, R2_e, R3_e, d1_e, d2_e)
-    print("Eyepiece transfer matrix:\n", M_e, "Determinant: ", np.linalg.det(M_e))
-    d = f_o + f_e
-    M_T = M_e @ translation_matrix(d, 1) @ M_o
-
-    M = (-f_o / f_e)
-
-    fov_i = 25.4/f_o
-
-    max_img_size = max(img_array.shape)
-
-    i_angular_pixel_size = fov_i / max_img_size
-
-    i_lateral_pixel_size = np.tan(i_angular_pixel_size) * f_o
-
-    output_img_size = (int(np.ceil(H * abs(M))), int(np.ceil(W * abs(M))))
-
-    return fov_i, f_o, f_e, i_angular_pixel_size, i_lateral_pixel_size, output_img_size, M_T, M
-
-def get_parameters(img_array, n1, n2, R1_o, R2_o, d_o, R1_e, R2_e, d_e):
-    """
-    Calculate the parameters for a telescope system.
-
-    Args:
-        img_array : numpy.ndarray - Input image array
-        n1 : float - Refractive index of the medium before the first lens
-        n2 : float - Refractive index of the medium after the first lens
-        R1_o, R2_o : float - Radii of curvature for the objective lens
-        d_o : float - Distance between the two lenses
-        R1_e, R2_e : float - Radii of curvature for the eyepiece lens
-        d_e : float - Distance between the eyepiece and image plane
+def image_infinity_to_rays(image_array, channel=0):
+    '''
+    Convert a 2D image array into a list of rays for ray tracing, assuming the image is at infinity.
+    
+    Parameters:
+    image_array : 2D numpy array - The input image where each pixel represents an intensity value.
+    channel : int - The channel index to extract intensity values from (default is 0).
     
     Returns:
-        fov_i : float - Initial field of view
-        f_o : float - Focal length of the objective lens (in mm)
-        f_e : float - Focal length of the eyepiece lens (in mm)
-        i_angular_pixel_size : float - Initial angular pixel size in the image plane
-        i_lateral_pixel_size : float - Initial lateral pixel size in the image plane
-        output_img_size : tuple - Size of the output image (height, width)
-        M_T : numpy.ndarray - Transfer matrix for the telescope system
-        M : float - Magnification factor
-    """
+    rays : list of tuples - A list of rays represented as tuples (x, y, angle, intensity) where:
+        x : float - The x-coordinate of the ray's origin
+        y : float - The y-coordinate of the ray's origin
+        angle : float - The angle of the ray with respect to the optical axis (in radians)
+        intensity : float - The intensity of the ray based on the pixel value
+    '''
+    rays = []
+    height, width, channels = image_array.shape
+    cx = width / 2  # Calculate the center x-coordinate of the image
+    cy = height / 2  # Calculate the center y-coordinate of the image
+    for i in range(height):
+        for j in range(width):
+            intensity = image_array[i, j, channel]  # Assuming the first channel represents intensity
+            if intensity > 0:  # Only consider pixels with non-zero intensity
+                anglex = (j - cx) / cx
+                angley = (i - cy) / cy
+                rays.append((anglex, angley, intensity))  # Append the ray with its intensity for further processing
+    return rays, cx, cy
 
-    f_o = 1 / ((n2 - n1) * (1 / R1_o - 1 / R2_o))  
-    f_e = 1 / ((n2 - n1) * (1 / R1_e - 1 / R2_e)) 
-
-    H, W = img_array.shape  
-
-    M_T = gal_telescope_transfer_matrix(n2, R1_o, R2_o, d_o, f_o, R1_e, R2_e, d_e, f_e)
-
-    M = (-f_o / f_e)
-
-    fov_i = 25.4/f_o
-
-    max_img_size = max(img_array.shape)
-    i_angular_pixel_size = fov_i / max_img_size
-    i_lateral_pixel_size = np.tan(i_angular_pixel_size) * f_o
-    output_img_size = (int(np.ceil(H * abs(M))), int(np.ceil(W * abs(M))))
-
-    return fov_i, f_o, f_e, i_angular_pixel_size, i_lateral_pixel_size, output_img_size, M_T, M
-
-def telescope(img_array, fov_i, f_o, f_e, i_angular_pixel_size, i_lateral_pixel_size, final_img_size, M_T, M):
-    """
-    Apply the telescope transformation to the input image array.
-
-    Args:
-        img_array : numpy.ndarray - Input image array
-        fov_i : float - Initial field of view
-        f_o : float - Focal length of the objective lens (in mm)
-        f_e : float - Focal length of the eyepiece lens (in mm)
-        i_angular_pixel_size : float - Initial angular pixel size in the image plane
-        i_lateral_pixel_size : float - Initial lateral pixel size in the image plane
-        final_img_size : tuple - Size of the output image (height, width)
-        M_T : numpy.ndarray - Transfer matrix for the telescope system
-        M : float - Magnification factor
-
-    """
-
-    H, W = img_array.shape 
-
-    fov_o = fov_i * M
-
-    max_output_img_size = max(final_img_size)
-    f_angular_pixel_size = fov_o / max_output_img_size
-    f_lateral_pixel_size = np.tan(f_angular_pixel_size) * abs(f_e)
-
-    final_img = np.zeros(final_img_size, dtype=np.uint8)
-    H_out, W_out = final_img_size
-
-    x = np.arange(W) - (W - 1) / 2  
-    y = np.arange(H) - (H - 1) / 2 
-    xx, yy = np.meshgrid(x, y, indexing='xy')  
-    x_world = xx * i_lateral_pixel_size
-    y_world = yy * i_lateral_pixel_size
-    theta = np.sqrt((xx * i_angular_pixel_size)**2 + (yy * i_angular_pixel_size)**2)
-
-    for y in range(H):
-        for x in range(W):
-            x_i = x_world[y, x]
-            y_i = y_world[y, x]
-            theta_i = theta[y, x]
-
-            x_f, y_f, final_state = transform_coords(x_i, y_i, theta_i, M_T)
-
-            x_p = (x_f / f_lateral_pixel_size + (W_out - 1) / 2).astype(int)
-            y_p = (y_f / f_lateral_pixel_size + (H_out - 1) / 2).astype(int)
-
-            if (0 <= x_p < final_img_size[1] and 0 <= y_p < final_img_size[0]):
-                final_img[y_p, x_p] = img_array[y, x]
-
-    return final_img
-
-def microscope_and_eye_matrix(n1, n2, R1_o, R2_o, d_o, R1_e, R2_e, d_e, f_cornea, f_lens_eye, d_eye, d_eye_eyepiece):
-    """
-    Calculate the transfer matrix for a microscope and eye system.
-
-    Args:
-        n1 : float - Refractive index of the medium before the first lens
-        n2 : float - Refractive index of the medium after the first lens
-        R1_o, R2_o : float - Radii of curvature for the objective lens
-        d_o : float - Distance between the two lenses
-        R1_e, R2_e : float - Radii of curvature for the eyepiece lens
-        d_e : float - Distance between the eyepiece and image plane
-        f_cornea : float - Focal length of the cornea
-        f_lens_eye : float - Focal length of the eye lens
-        d_eye : float - Distance between the eye lens and retina
-        d_eye_eyepiece : float - Distance between the eye lens and eyepiece
+def rays_to_image(rays, pixel_size):
+    '''
+    Convert a list of rays back into a 2D image array.
+    
+    Parameters:
+    rays : list of tuples - A list of rays represented as tuples (x, y, angle, intensity) where:
+        x : float - The x-coordinate of the ray's origin
+        y : float - The y-coordinate of the ray's origin
+        angle : float - The angle of the ray with respect to the optical axis (in radians)
+        intensity : float - The intensity of the ray
+    pixel_size : float - The physical size of each pixel in the same units as the ray tracing system.
+    
     Returns:
-        M : numpy.ndarray - 2x2 transfer matrix for the microscope and eye system
-    """
-    D_Sample_objective = 20  # Distance between the sample and the objective lens (in mm)
-    M_sample_objective = translation_matrix(D_Sample_objective, 1)
-    M_o = thick_lens_transfer_matrix(R1_o, R2_o, d_o, n2)
-    M_e = thick_lens_transfer_matrix(R1_e, R2_e, d_e, n2)
-    D_oe = 225  # Distance between objective and eyepiece (in mm)
-    MD = translation_matrix(D_oe, 1)
-    D_eye_eyepiece = d_eye_eyepiece  # Distance between eye lens and eyepiece (in mm)
-    M_eye_eyepiece = translation_matrix(D_eye_eyepiece, 1)
-    M_cornea = thin_lens_transfer_matrix(f_cornea)
-    M_eye = thin_lens_transfer_matrix(f_lens_eye)
-    D_eye = d_eye  # Distance between eye lens and retina (in mm)
-    M_eye_prop = translation_matrix(D_eye, 1)
-    M = M_eye_prop @ M_eye @ M_cornea @ M_eye_eyepiece @ M_e @ MD @ M_o @ M_sample_objective
-    return M
+    image_array : 2D numpy array - The resulting image array where each pixel value is the sum of intensities from rays that fall into that pixel.
+    '''
+    # Determine the size of the image based on the maximum x and y coordinates of the rays
+    max_x = max(ray[0] for ray in rays)
+    max_y = max(ray[1] for ray in rays)
+    width = int(np.ceil(max_x * 2/ pixel_size)) + 1  # Calculate the width of the image array
+    height = int(np.ceil(max_y * 2/ pixel_size)) + 1  # Calculate the height of the image array
+    image_array = np.zeros((height, width), dtype=np.float32)  # Initialize the image array with zeros
+    for ray in rays:
+        x_centered, y_centered, angle, intensity = ray
+        x = x_centered + (width * pixel_size) / 2  # Adjust x-coordinate back to image space
+        y = y_centered + (height * pixel_size) / 2  # Adjust y-coordinate back to image space
+        j = int(x / pixel_size)  # Calculate the pixel index for x-coordinate
+        i = int(y / pixel_size)  # Calculate the pixel index for y-coordinate
+        if 0 <= i < height and 0 <= j < width:  # Ensure the indices are within the bounds of the image array
+            image_array[i, j] += intensity  # Add the intensity of the ray to the corresponding pixel
+    # Normalize the image array to the range [0, 255] for visualization purposes
+    image_array = (image_array / np.max(image_array) * 255).astype(np.uint8)
+    return image_array
 
-def get_parameters_microscope(img_array, n1, n2, R1_o, R2_o, d_o, R1_e, R2_e, d_e, f_cornea, f_lens_eye, d_eye, d_eye_eyepiece):
-    """
-    Calculate the parameters for a telescope system.
-
-    Args:
-        img_array : numpy.ndarray - Input image array
-        n1 : float - Refractive index of the medium before the first lens
-        n2 : float - Refractive index of the medium after the first lens
-        R1_o, R2_o : float - Radii of curvature for the objective lens
-        d_o : float - Distance between the two lenses
-        R1_e, R2_e : float - Radii of curvature for the eyepiece lens
-        d_e : float - Distance between the eyepiece and image plane
-        f_cornea : float - Focal length of the cornea
-        f_lens_eye : float - Focal length of the eye lens
-        d_eye : float - Distance between the eye lens and retina
-        d_eye_eyepiece : float - Distance between the eye lens and eyepiece
-
+def rays_to_image_infinity(rays, cx, cy):
+    '''
+    Convert a list of rays back into a 2D image array, assuming the rays are coming from infinity.
+    
+    Parameters:
+    rays : list of tuples - A list of rays represented as tuples (anglex, angley, intensity) where:
+        anglex : float - The angle of the ray in the x-direction with respect to the optical axis (in radians)
+        angley : float - The angle of the ray in the y-direction with respect to the optical axis (in radians)
+        intensity : float - The intensity of the ray
+    pixel_size : float - The physical size of each pixel in the same units as the ray tracing system.
+    
     Returns:
-        fov_i : float - Initial field of view
-        f_o : float - Focal length of the objective lens (in mm)
-        f_e : float - Focal length of the eyepiece lens (in mm)
-        i_angular_pixel_size : float - Initial angular pixel size in the image plane
-        i_lateral_pixel_size : float - Initial lateral pixel size in the image plane
-        output_img_size : tuple - Size of the output image (height, width)
-        M_T : numpy.ndarray - Transfer matrix for the telescope system
-        M : float - Magnification factor
-    """
+    image_array : 2D numpy array - The resulting image array where each pixel value is the sum of intensities from rays that fall into that pixel.
+    '''
+    max_ux = max(abs(ray[0]) for ray in rays)
+    max_uy = max(abs(ray[1]) for ray in rays)
+    j_max = (int(np.ceil(max_ux * cx + cx)) + 1) * 2  # Calculate the maximum pixel index for x-direction
+    i_max = (int(np.ceil(max_uy * cy + cy)) + 1) * 2  # Calculate the maximum pixel index for y-direction
+    image_array = np.zeros((i_max, j_max), dtype=np.float32)  # Initialize the image array with zeros
+    for ray in rays:
+        ux_out, uy_out, intensity = ray
+        x = int((ux_out + 1) * cx) + j_max // 2  # Convert angle back to pixel index for x-coordinate
+        y = int((uy_out + 1) * cy) + i_max // 2  # Convert angle back to pixel index for y-coordinate
+        if 0 <= y < image_array.shape[0] and 0 <= x < image_array.shape[1]:  # Ensure the indices are within the bounds of the image array
+            image_array[y, x] += intensity  # Add the intensity of the ray to the corresponding pixel
+    # Cut empty rows and columns from the image array to focus on the area where rays are present
+    non_zero_rows = np.where(np.any(image_array > 0, axis=1))[0]
+    non_zero_cols = np.where(np.any(image_array > 0, axis=0))[0]
+    if non_zero_rows.size > 0 and non_zero_cols.size > 0:
+        image_array = image_array[non_zero_rows[0]:non_zero_rows[-1] + 1, non_zero_cols[0]:non_zero_cols[-1] + 1]
+    image_array = (image_array / np.max(image_array) * 255).astype(np.uint8)  # Normalize the image array to the range [0, 255] for visualization purposes
+    return image_array
 
-    f_o = 1 / ((n2 - n1) * (1 / R1_o - 1 / R2_o))  
-    f_e = 1 / ((n2 - n1) * (1 / R1_e - 1 / R2_e)) 
-    print("Objective focal length: ", f_o)
-    print("Eyepiece focal length: ", f_e)
+def pad_to_shape(img, target_h, target_w):
+    h, w = img.shape
+    pad_h = target_h - h
+    pad_w = target_w - w
+    top = pad_h // 2
+    bottom = pad_h - top
+    left = pad_w // 2
+    right = pad_w - left
+    return np.pad(img, ((top, bottom), (left, right)), mode="constant", constant_values=0)
 
-    H, W = img_array.shape  
-
-    M_M = microscope_and_eye_matrix(n2, n2, R1_o, R2_o, d_o, R1_e, R2_e, d_e, f_cornea, f_lens_eye, d_eye, d_eye_eyepiece)
-
-    M = M_M[0, 0]  # Magnification factor is given by the (0, 0) element of the transfer matrix
-
-    fov_i = 25.4/f_o
-
-    max_img_size = max(img_array.shape)
-    i_angular_pixel_size = fov_i / max_img_size
-    i_lateral_pixel_size = np.tan(i_angular_pixel_size) * f_o
-    output_img_size = (int(np.ceil(H * abs(M))), int(np.ceil(W * abs(M))))
-
-    return fov_i, f_o, f_e, i_angular_pixel_size, i_lateral_pixel_size, output_img_size, M_M, M
-
-def microscope(img_array, fov_i, f_o, f_e, i_angular_pixel_size, i_lateral_pixel_size, final_img_size, M_M, M):
-    """
-    Apply the telescope transformation to the input image array.
-
-    Args:
-        img_array : numpy.ndarray - Input image array
-        fov_i : float - Initial field of view
-        f_o : float - Focal length of the objective lens (in mm)
-        f_e : float - Focal length of the eyepiece lens (in mm)
-        i_angular_pixel_size : float - Initial angular pixel size in the image plane
-        i_lateral_pixel_size : float - Initial lateral pixel size in the image plane
-        final_img_size : tuple - Size of the output image (height, width)
-        M_M : numpy.ndarray - Transfer matrix for the microscope system
-        M : float - Magnification factor
-
-    """
-
-    H, W = img_array.shape 
-
-    fov_o = fov_i * M
-
-    max_output_img_size = max(final_img_size)
-    f_angular_pixel_size = fov_o / max_output_img_size
-    f_lateral_pixel_size = np.tan(f_angular_pixel_size) * abs(f_e)
-
-    final_img = np.zeros(final_img_size, dtype=np.uint8)
-    H_out, W_out = final_img_size
-
-    x = np.arange(W) - (W - 1) / 2  
-    y = np.arange(H) - (H - 1) / 2 
-    xx, yy = np.meshgrid(x, y, indexing='xy')  
-    x_world = xx * i_lateral_pixel_size
-    y_world = yy * i_lateral_pixel_size
-    theta = np.sqrt((xx * i_angular_pixel_size)**2 + (yy * i_angular_pixel_size)**2)
-
-    for y in range(H):
-        for x in range(W):
-            x_i = x_world[y, x]
-            y_i = y_world[y, x]
-            theta_i = theta[y, x]
-
-            x_f, y_f, final_state = transform_coords(x_i, y_i, theta_i, M_M)
-
-            x_p = (x_f / f_lateral_pixel_size + (W_out - 1) / 2).astype(int)
-            y_p = (y_f / f_lateral_pixel_size + (H_out - 1) / 2).astype(int)
-
-            if (0 <= x_p < final_img_size[1] and 0 <= y_p < final_img_size[0]):
-                final_img[y_p, x_p] = img_array[y, x]
-
-    return final_img
+def update_elements_color(system, element, material=None):
+    type = element.__class__.__name__
+    if type == 'ThickLens':
+                nR = refractive_index(0.6563, material[0])  # Refractive index for red light (656.3 nm)
+                nG = refractive_index(0.5876, material[0])  # Refractive index for green light (587.6 nm)
+                nB = refractive_index(0.4861, material[0])  # Refractive index for blue light (486.1 nm)
+                element_MR = thick_lens_transfer_matrix(element.R1, element.R2, element.d, nR)  # Transfer matrix for red light
+                element_MG = thick_lens_transfer_matrix(element.R1, element.R2, element.d, nG)  # Transfer matrix for green light
+                element_MB = thick_lens_transfer_matrix(element.R1, element.R2, element.d, nB)  # Transfer matrix for blue light
+                system.MR = element_MR @ system.MR  # Update the system matrix for red light
+                system.MG = element_MG @ system.MG  # Update the system matrix for green light
+                system.MB = element_MB @ system.MB  # Update the system matrix for blue light
+                system.MRGB = [system.MR, system.MG, system.MB]  # Update the list of system matrices for each color
+    elif type == 'Mirror':
+                system.MR = element.matrix() @ system.MR  # Update the system matrix for red light
+                system.MG = element.matrix() @ system.MG  # Update the system matrix for green light
+                system.MB = element.matrix() @ system.MB  # Update the system matrix for blue light
+                system.MRGB = [system.MR, system.MG, system.MB]  # Update the list of system matrices for each color
+    elif type == 'Doublet':
+                nR1 = refractive_index(0.6563, material[0])  # Refractive index for red light (656.3 nm) for the first lens
+                nR2 = refractive_index(0.6563, material[1])  # Refractive index for red light (656.3 nm) for the second lens
+                nG1 = refractive_index(0.5876, material[0])  # Refractive index for green light (587.6 nm) for the first lens
+                nG2 = refractive_index(0.5876, material[1])  # Refractive index for green light (587.6 nm) for the second lens
+                nB1 = refractive_index(0.4861, material[0])  # Refractive index for blue light (486.1 nm) for the first lens
+                nB2 = refractive_index(0.4861, material[1])  # Refractive index for blue light (486.1 nm) for the second lens
+                element_MR = doublet_matrix(1, nR1, nR2, element.R1, element.R2, element.R3, element.d1, element.d2)  # Transfer matrix for red light
+                element_MG = doublet_matrix(1, nG1, nG2, element.R1, element.R2, element.R3, element.d1, element.d2)  # Transfer matrix for green light
+                element_MB = doublet_matrix(1, nB1, nB2, element.R1, element.R2, element.R3, element.d1, element.d2)  # Transfer matrix for blue light
+                system.MR = element_MR @ system.MR  # Update the system matrix for red light
+                system.MG = element_MG @ system.MG  # Update the system matrix for green light
+                system.MB = element_MB @ system.MB  # Update the system matrix for blue light
+                system.MRGB = [system.MR, system.MG, system.MB]  # Update the list of system matrices for each color
+    elif type == 'FreeSpace':
+                system.MR = element.matrix() @ system.MR  # Update the system matrix for red light
+                system.MG = element.matrix() @ system.MG  # Update the system matrix for green light
+                system.MB = element.matrix() @ system.MB  # Update the system matrix for blue light
+                system.MRGB = [system.MR, system.MG, system.MB]  # Update the list of system matrices for each color
+    elif type == 'Triplet':
+                nR1 = refractive_index(0.6563, material[0])  # Refractive index for red light (656.3 nm) for the first lens
+                nR2 = refractive_index(0.6563, material[1])  # Refractive index for red light (656.3 nm) for the second lens
+                nR3 = refractive_index(0.6563, material[2])  # Refractive index for red light (656.3 nm) for the third lens
+                nG1 = refractive_index(0.5876, material[0])  # Refractive index for green light (587.6 nm) for the first lens
+                nG2 = refractive_index(0.5876, material[1])  # Refractive index for green light (587.6 nm) for the second lens
+                nG3 = refractive_index(0.5876, material[2])  # Refractive index for green light (587.6 nm) for the third lens
+                nB1 = refractive_index(0.4861, material[0])  # Refractive index for blue light (486.1 nm) for the first lens
+                nB2 = refractive_index(0.4861, material[1])  # Refractive index for blue light (486.1 nm) for the second lens
+                nB3 = refractive_index(0.4861, material[2])  # Refractive index for blue light (486.1 nm) for the third lens
+                element_MR = triplet_matrix(1, nR1, nR2, nR3, element.R1, element.R2, element.R3, element.R4, element.R5, element.d1, element.d2, element.d3)  # Transfer matrix for red light
+                element_MG = triplet_matrix(1, nG1, nG2, nG3, element.R1, element.R2, element.R3, element.R4, element.R5, element.d1, element.d2, element.d3)  # Transfer matrix for green light
+                element_MB = triplet_matrix(1, nB1, nB2, nB3, element.R1, element.R2, element.R3, element.R4, element.R5, element.d1, element.d2, element.d3)  # Transfer matrix for blue light
+                system.MR = element_MR @ system.MR  # Update the system matrix for red light
+                system.MG = element_MG @ system.MG  # Update the system matrix for green light
+                system.MB = element_MB @ system.MB  # Update the system matrix for blue light
+                system.MRGB = [system.MR, system.MG, system.MB]  # Update the list of system matrices for each color
+    else:
+                raise ValueError("Element type not recognized")
+    return

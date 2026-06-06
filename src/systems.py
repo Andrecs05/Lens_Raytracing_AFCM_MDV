@@ -1,75 +1,93 @@
 import numpy as np
 from scipy.interpolate import griddata
-from src.utilities2 import *
+from src.utilities import *
 from src.refractive_idxs import *
 from src.matrix_formation import *
+from src.elements import *
 
 class OpticalSystem:
     def __init__(self, color=False):
         self.color = color  
-        if self.color:  # If the system is set to handle color, we can initialize wavelength-dependent properties here
-            self.MR = np.eye(2)  # Initialize the system matrix for red light
-            self.MG = np.eye(2)  # Initialize the system matrix for green light
-            self.MB = np.eye(2)  # Initialize the system matrix for blue light
+        if self.color:  # If the system is set to handle color, initialize wavelength-dependent properties here
+            # Initialize separate system matrices for red, green, and blue light to account for chromatic effects
+            self.MR = np.eye(2)  
+            self.MG = np.eye(2) 
+            self.MB = np.eye(2)  
             self.MRGB = [self.MR, self.MG, self.MB]  # List to hold the system matrices for each color
         else:
             self.M = np.eye(2)  # Initialize the system matrix for monochromatic light
-    def add_element(self, element, material='NBK7'):
-        if self.color:  # If the system is set to handle color, we can implement wavelength-dependent behavior here
+
+    def add_element(self, element, material=['NBK7']):
+        if self.color:  # If the system is set to handle color, implement wavelength-dependent behavior here
             update_elements_color(self, element, material)  # Update the system matrices for each color based on the new element and its material
         else:        
-            self.M = element.matrix() @ self.M  # Update the system matrix by multiplying with the new element's matrix
+            self.M = element.matrix() @ self.M  
+
     def focal_length(self):
-        if self.color:  # If the system is set to handle color, we can calculate focal lengths for each color separately
-            focal_length_R = 1 / (-self.MR[1,0])  # Calculate the focal length for red light using the red system matrix
-            focal_length_G = 1 / (-self.MG[1,0])  # Calculate the focal length for green light using the green system matrix
-            focal_length_B = 1 / (-self.MB[1,0])  # Calculate the focal length for blue light using the blue system matrix
-            return focal_length_R, focal_length_G, focal_length_B  # Return the focal lengths for each color as a tuple
+        if self.color:  # If the system is set to handle color, calculate focal lengths for each color separately
+            focal_length_R = 1 / (-self.MR[1,0])  
+            focal_length_G = 1 / (-self.MG[1,0]) 
+            focal_length_B = 1 / (-self.MB[1,0]) 
+            return focal_length_R, focal_length_G, focal_length_B 
         else:
             return 1 / (-self.M[1,0])  # Calculate the focal length of the system using the system matrix
+        
     def magnification(self):
-        if self.color:  # If the system is set to handle color, we can calculate magnifications for each color separately
-            magnification_R = self.MR[0,0]  # Calculate the magnification for red light using the red system matrix
-            magnification_G = self.MG[0,0]  # Calculate the magnification for green light using the green system matrix
-            magnification_B = self.MB[0,0]  # Calculate the magnification for blue light using the blue system matrix
-            return magnification_R, magnification_G, magnification_B  # Return the magnifications for each color as a tuple
+        if self.color:  # If the system is set to handle color, calculate magnifications for each color separately
+            magnification_R = self.MR[0,0] 
+            magnification_G = self.MG[0,0] 
+            magnification_B = self.MB[0,0]  
+            return magnification_R, magnification_G, magnification_B  
         else:
             return self.M[0,0]  # Calculate the magnification of the system using the system matrix
-    def single_ray_transfer(self, ray, matrix=None):
-        if len(ray) == 4:  # If the ray includes intensity, ignore it for the transfer
-            r = np.sqrt(ray[0]**2 + ray[1]**2) 
-            phi = np.arctan2(ray[1], ray[0]) 
-            theta = ray[2] 
-            intensity = ray[3] 
-            ray_vector = np.array([r, theta]) 
-            output_vector = matrix @ ray_vector 
-            x_output = output_vector[0] * np.cos(phi)  
-            y_output = output_vector[0] * np.sin(phi)  
-            output_ray = (x_output, y_output, output_vector[1], intensity) 
-            return output_ray  
-        else:  # If the ray does not include intensity, just transfer the ray vector
-            r = np.sqrt(ray[0]**2 + ray[1]**2)
-            phi = np.arctan2(ray[1], ray[0]) 
-            theta = ray[2]  
-            ray_vector = np.array([r, theta])  
-            output_vector = matrix @ ray_vector  
-            x_output = output_vector[0] * np.cos(phi)
-            y_output = output_vector[0] * np.sin(phi)
-            output_ray = (x_output, y_output, output_vector[1])
+        
+    def single_ray_transfer(self, ray, matrix=None, infinity=False):
+        if not infinity:
+            if len(ray) == 4:  # If the ray includes intensity, ignore it for the transfer
+                r = np.sqrt(ray[0]**2 + ray[1]**2) 
+                phi = np.arctan2(ray[1], ray[0]) 
+                theta = ray[2] 
+                intensity = ray[3] 
+                ray_vector = np.array([r, theta]) 
+                output_vector = matrix @ ray_vector 
+                x_output = output_vector[0] * np.cos(phi)  
+                y_output = output_vector[0] * np.sin(phi)  
+                output_ray = (x_output, y_output, output_vector[1], intensity) 
+                return output_ray  
+            else:  # If the ray does not include intensity, just transfer the ray vector
+                r = np.sqrt(ray[0]**2 + ray[1]**2)
+                phi = np.arctan2(ray[1], ray[0]) 
+                theta = ray[2]  
+                ray_vector = np.array([r, theta])  
+                output_vector = matrix @ ray_vector  
+                x_output = output_vector[0] * np.cos(phi)
+                y_output = output_vector[0] * np.sin(phi)
+                output_ray = (x_output, y_output, output_vector[1])
+                return output_ray
+        else:  # If the ray is coming from infinity, only the angle matters for the transfer
+            ux = ray[0]
+            uy = ray[1]
+            intensity = ray[2] 
+            ray_in_x = np.array([0, ux])
+            ray_in_y = np.array([0, uy])
+            ray_out_x = matrix @ ray_in_x
+            ray_out_y = matrix @ ray_in_y
+            output_ray = (ray_out_x[1], ray_out_y[1], intensity)
             return output_ray
+
     def image(self, image_array, pixel_size):
-        if self.color:  # If the system is set to handle color, we can process the image for each color channel separately
-            rays_R = image_to_rays(image_array, pixel_size, channel=0)  # Convert the input image array into rays for the red channel
-            rays_G = image_to_rays(image_array, pixel_size, channel=1)  # Convert the input image array into rays for the green channel
-            rays_B = image_to_rays(image_array, pixel_size, channel=2)  # Convert the input image array into rays for the blue channel
+        if self.color:  # If the system is set to handle color, process the image for each color channel separately
+            rays_R = image_to_rays_0_angle(image_array, pixel_size, channel=0) 
+            rays_G = image_to_rays_0_angle(image_array, pixel_size, channel=1)  
+            rays_B = image_to_rays_0_angle(image_array, pixel_size, channel=2)
             
-            output_rays_R = [self.single_ray_transfer(ray, self.MR) for ray in rays_R]  # Transfer each ray through the system for the red channel
-            output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G]  # Transfer each ray through the system for the green channel
-            output_rays_B = [self.single_ray_transfer(ray, self.MB) for ray in rays_B]  # Transfer each ray through the system for the blue channel
+            output_rays_R = [self.single_ray_transfer(ray, self.MR) for ray in rays_R] 
+            output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G] 
+            output_rays_B = [self.single_ray_transfer(ray, self.MB) for ray in rays_B]  
             
-            output_image_array_R = rays_to_image(output_rays_R, pixel_size)  # Convert the output rays back into an image array for the red channel
-            output_image_array_G = rays_to_image(output_rays_G, pixel_size)  # Convert the output rays back into an image array for the green channel
-            output_image_array_B = rays_to_image(output_rays_B, pixel_size)  # Convert the output rays back into an image array for the blue channel
+            output_image_array_R = rays_to_image(output_rays_R, pixel_size)
+            output_image_array_G = rays_to_image(output_rays_G, pixel_size) 
+            output_image_array_B = rays_to_image(output_rays_B, pixel_size) 
             
             target_h = max(output_image_array_R.shape[0], output_image_array_G.shape[0], output_image_array_B.shape[0])
             target_w = max(output_image_array_R.shape[1], output_image_array_G.shape[1], output_image_array_B.shape[1])
@@ -78,56 +96,140 @@ class OpticalSystem:
             output_image_array_G = pad_to_shape(output_image_array_G, target_h, target_w)
             output_image_array_B = pad_to_shape(output_image_array_B, target_h, target_w)
             
-            output_image_array = np.stack((output_image_array_R, output_image_array_G, output_image_array_B), axis=-1)  # Combine the color channels into a single image array
+            output_image_array = np.stack((output_image_array_R, output_image_array_G, output_image_array_B), axis=-1)  
             return output_image_array  # Return the resulting image array after processing through the system
         else:
-            rays = image_to_rays(image_array, pixel_size)  # Convert the input image array into rays
-            output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays]  # Transfer each ray through the system
-            output_image_array = rays_to_image(output_rays, pixel_size)  # Convert the output rays back into an image array
+            rays = image_to_rays_0_angle(image_array, pixel_size)  
+            output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
+            output_image_array = rays_to_image(output_rays, pixel_size)  
             return output_image_array  # Return the resulting image array after processing through the system
-    def image_with_interpolation(self, image_array, pixel_size):
-        if self.color:  # If the system is set to handle color, we can process the image for each color channel separately
-            rays_R = image_to_rays(image_array, pixel_size, channel=0)  # Convert the input image array into rays for the red channel
-            rays_G = image_to_rays(image_array, pixel_size, channel=1)  # Convert the input image array into rays for the green channel
-            rays_B = image_to_rays(image_array, pixel_size, channel=2)  # Convert the input image array into rays for the blue channel
 
-            output_rays_R = [self.single_ray_transfer(ray, self.MR) for ray in rays_R]  # Transfer each ray through the system for the red channel
-            output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G]  # Transfer each ray through the system for the green channel
-            output_rays_B = [self.single_ray_transfer(ray, self.MB) for ray in rays_B]  # Transfer each ray through the system for the blue channel
-
-            output_image_array_R = rays_to_image(output_rays_R, pixel_size)  # Convert the output rays back into an image array for the red channel
-            output_image_array_G = rays_to_image(output_rays_G, pixel_size)  # Convert the output rays back into an image array for the green channel
-            output_image_array_B = rays_to_image(output_rays_B, pixel_size)  # Convert the output rays back into an image array for the blue channel
-
+    def image_infinity(self, image_array):
+        if self.color:  # If the system is set to handle color, process the image for each color channel separately
+            rays_R, cx_R, cy_R = image_infinity_to_rays(image_array, channel=0) 
+            rays_G, cx_G, cy_G = image_infinity_to_rays(image_array, channel=1)  
+            rays_B, cx_B, cy_B = image_infinity_to_rays(image_array, channel=2)
+            
+            output_rays_R = [self.single_ray_transfer(ray, self.MR, infinity=True) for ray in rays_R] 
+            output_rays_G = [self.single_ray_transfer(ray, self.MG, infinity=True) for ray in rays_G] 
+            output_rays_B = [self.single_ray_transfer(ray, self.MB, infinity=True) for ray in rays_B]  
+            
+            output_image_array_R = rays_to_image_infinity(output_rays_R, cx_R, cy_R)
+            output_image_array_G = rays_to_image_infinity(output_rays_G, cx_G, cy_G) 
+            output_image_array_B = rays_to_image_infinity(output_rays_B, cx_B, cy_B) 
+            
             target_h = max(output_image_array_R.shape[0], output_image_array_G.shape[0], output_image_array_B.shape[0])
             target_w = max(output_image_array_R.shape[1], output_image_array_G.shape[1], output_image_array_B.shape[1])
 
             output_image_array_R = pad_to_shape(output_image_array_R, target_h, target_w)
             output_image_array_G = pad_to_shape(output_image_array_G, target_h, target_w)
             output_image_array_B = pad_to_shape(output_image_array_B, target_h, target_w)
-            output_image_array = np.stack((output_image_array_R, output_image_array_G, output_image_array_B), axis=-1)  # Combine the color channels into a single image array
             
-            interpolated_image_array_R = griddata(np.argwhere(output_image_array_R>0), output_image_array_R[output_image_array_R>0], (np.indices(output_image_array_R.shape)[0], np.indices(output_image_array_R.shape)[1]), method='cubic', fill_value=0)  # Perform cubic interpolation for the red channel
-            interpolated_image_array_G = griddata(np.argwhere(output_image_array_G>0), output_image_array_G[output_image_array_G>0], (np.indices(output_image_array_G.shape)[0], np.indices(output_image_array_G.shape)[1]), method='cubic', fill_value=0)  # Perform cubic interpolation for the green channel
-            interpolated_image_array_B = griddata(np.argwhere(output_image_array_B>0), output_image_array_B[output_image_array_B>0], (np.indices(output_image_array_B.shape)[0], np.indices(output_image_array_B.shape)[1]), method='cubic', fill_value=0)  # Perform cubic interpolation for the blue channel
+            output_image_array = np.stack((output_image_array_R, output_image_array_G, output_image_array_B), axis=-1)  
+            return output_image_array  # Return the resulting image array after processing through the system
+        else:
+            rays, cx, cy = image_infinity_to_rays(image_array)  
+            output_rays = [self.single_ray_transfer(ray, self.M, infinity=True) for ray in rays] 
+            output_image_array = rays_to_image_infinity(output_rays, cx, cy)  
+            return output_image_array  # Return the resulting image array after processing through the system
+
+    def image_with_interpolation(self, image_array, pixel_size=None, infinity=False):
+        if not infinity:
+            output_image_array = self.image(image_array, pixel_size) 
+        else:
+            output_image_array = self.image_infinity(image_array)
+
+        if self.color:  # If the system is set to handle color, perform interpolation for each color channel separately
+            interpolated_image_array_R = griddata(np.argwhere(output_image_array[:,:,0]>0), output_image_array[:,:,0][output_image_array[:,:,0]>0], (np.indices(output_image_array[:,:,0].shape)[0], np.indices(output_image_array[:,:,0].shape)[1]), method='cubic', fill_value=0) 
+            interpolated_image_array_G = griddata(np.argwhere(output_image_array[:,:,1]>0), output_image_array[:,:,1][output_image_array[:,:,1]>0], (np.indices(output_image_array[:,:,1].shape)[0], np.indices(output_image_array[:,:,1].shape)[1]), method='cubic', fill_value=0)  
+            interpolated_image_array_B = griddata(np.argwhere(output_image_array[:,:,2]>0), output_image_array[:,:,2][output_image_array[:,:,2]>0], (np.indices(output_image_array[:,:,2].shape)[0], np.indices(output_image_array[:,:,2].shape)[1]), method='cubic', fill_value=0)  
             
-            interpolated_image_array_R = (interpolated_image_array_R / np.max(interpolated_image_array_R)) * np.max(image_array[:,:,0])  # Normalize the interpolated red channel
-            interpolated_image_array_G = (interpolated_image_array_G / np.max(interpolated_image_array_G)) * np.max(image_array[:,:,1])  # Normalize the interpolated green channel
-            interpolated_image_array_B = (interpolated_image_array_B / np.max(interpolated_image_array_B)) * np.max(image_array[:,:,2])  # Normalize the interpolated blue channel
+            interpolated_image_array_R = (interpolated_image_array_R / np.max(interpolated_image_array_R)) * np.max(image_array[:,:,0]) 
+            interpolated_image_array_G = (interpolated_image_array_G / np.max(interpolated_image_array_G)) * np.max(image_array[:,:,1])  
+            interpolated_image_array_B = (interpolated_image_array_B / np.max(interpolated_image_array_B)) * np.max(image_array[:,:,2])
             
-            interpolated_image_array_R = np.clip(interpolated_image_array_R, 0, 255).astype(np.uint8)  # Clip values to the range [0, 255] and convert to uint8 for the red channel
-            interpolated_image_array_G = np.clip(interpolated_image_array_G, 0, 255).astype(np.uint8)  # Clip values to the range [0, 255] and convert to uint8 for the green channel
-            interpolated_image_array_B = np.clip(interpolated_image_array_B, 0, 255).astype(np.uint8)  # Clip values to the range [0, 255] and convert to uint8 for the blue channel
-            
+            interpolated_image_array_R = np.clip(interpolated_image_array_R, 0, 255).astype(np.uint8)
+            interpolated_image_array_G = np.clip(interpolated_image_array_G, 0, 255).astype(np.uint8)
+            interpolated_image_array_B = np.clip(interpolated_image_array_B, 0, 255).astype(np.uint8)
             interpolated_image_array = np.stack((interpolated_image_array_R, interpolated_image_array_G, interpolated_image_array_B), axis=-1)  # Combine the color channels into a single image array
             return interpolated_image_array  # Return the interpolated image array after processing through the system
         else:
-            rays = image_to_rays(image_array, pixel_size)  # Convert the input image array into rays
-            output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays]  # Transfer each ray through the system
-            output_image_array = rays_to_image(output_rays, pixel_size)  # Convert the output rays back into an image array
-            # Interpolate the output image array to fill in any gaps
             interpolated_image_array = griddata(np.argwhere(output_image_array>0), output_image_array[output_image_array>0], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  # Perform cubic interpolation
-            # Normalize the interpolated image array and convert it back to unsigned 8-bit integer format for visualization
-            interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(image_array)
-            interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8)  # Clip values to the range [0, 255] and convert to uint8
+            interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(image_array)  
+            interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8) 
             return interpolated_image_array  # Return the interpolated image array after processing through the system
+
+class GalileanTelescope(OpticalSystem):
+    def __init__(self, f1=100, f2=-20, lens1=None, lens2=None, magnification=None, color=False, material1=['NBK7'], material2=['NBK7']):
+        super().__init__(color=color)  # Call the constructor of the parent class to initialize the color property and system matrices
+        if lens1 is not None and lens2 is not None:  # If specific lens objects are provided, use them to build the system
+            self.add_element(lens1, material=material1)
+            L = lens1.focal_length() + lens2.focal_length() 
+            L_propagation = FreeSpace(L)
+            self.add_element(L_propagation)
+            self.add_element(lens2, material=material2)  
+        else:  
+            if magnification is None:  # If a magnification value is provided, calculate the focal lengths based on the magnification
+                self.f1 = f1 
+                self.f2 = f2  
+                self.L = f1 + f2  
+                self.add_element(ThinLens(f1), material=material1)  
+                self.add_element(FreeSpace(self.L)) 
+                self.add_element(ThinLens(f2), material=material2)  
+            else:  # If a magnification value is provided, calculate the focal lengths based on the magnification
+                self.f1 = 100  
+                self.f2 = -self.f1 / magnification 
+                self.L = self.f1 + self.f2  
+                self.add_element(ThinLens(self.f1), material=material1)
+                self.add_element(FreeSpace(self.L))
+                self.add_element(ThinLens(self.f2), material=material2)
+
+class KeplerianTelescope(OpticalSystem):
+    def __init__(self, f1=100, f2=20, lens1=None, lens2=None, magnification=None, color=False, material1=['NBK7'], material2=['NBK7']):
+        super().__init__(color=color)  # Call the constructor of the parent class to initialize the color property and system matrices
+        if lens1 is not None and lens2 is not None:  # If specific lens objects are provided, use them to build the system
+            self.add_element(lens1, material=material1)
+            L = lens1.focal_length() + lens2.focal_length() 
+            L_propagation = FreeSpace(L)
+            self.add_element(L_propagation)
+            self.add_element(lens2, material=material2)  
+        else:  
+            if magnification is None:  # If a magnification value is provided, calculate the focal lengths based on the magnification
+                self.f1 = f1 
+                self.f2 = f2  
+                self.L = self.f1 + self.f2  
+                self.add_element(ThinLens(self.f1), material=material1)  
+                self.add_element(FreeSpace(self.L)) 
+                self.add_element(ThinLens(self.f2), material=material2)  
+            else:  # If a magnification value is provided, calculate the focal lengths based on the magnification
+                self.f1 = 100  
+                self.f2 = -self.f1 / magnification 
+                self.L = self.f1 + self.f2  
+                self.add_element(ThinLens(self.f1), material=material1)
+                self.add_element(FreeSpace(self.L))
+                self.add_element(ThinLens(self.f2), material=material2)
+
+class BrightFieldMicroscope(OpticalSystem):
+    def __init__(self, objective_focal_length=4, eyepiece_focal_length=25, objective=None, eyepiece=None, magnification=None, color=False, material_objective=['NBK7'], material_eyepiece=['NBK7']):
+        super().__init__(color=color)  # Call the constructor of the parent class to initialize the color property and system matrices
+        if objective is not None and eyepiece is not None:  # If specific lens objects are provided, use them to build the system
+            self.add_element(objective, material=material_objective)
+            L = objective.focal_length() + eyepiece.focal_length() 
+            L_propagation = FreeSpace(L)
+            self.add_element(L_propagation)
+            self.add_element(eyepiece, material=material_eyepiece)  
+        else:  
+            if magnification is None:  # If a magnification value is provided, calculate the focal lengths based on the magnification
+                self.objective_focal_length = objective_focal_length 
+                self.eyepiece_focal_length = eyepiece_focal_length  
+                self.L = self.objective_focal_length + self.eyepiece_focal_length  
+                self.add_element(ThinLens(self.objective_focal_length), material=material_objective)  
+                self.add_element(FreeSpace(self.L)) 
+                self.add_element(ThinLens(self.eyepiece_focal_length), material=material_eyepiece)  
+            else:  # If a magnification value is provided, calculate the focal lengths based on the magnification
+                self.objective_focal_length = 4  
+                self.eyepiece_focal_length = -self.objective_focal_length / magnification 
+                self.L = self.objective_focal_length + self.eyepiece_focal_length  
+                self.add_element(ThinLens(self.objective_focal_length), material=material_objective)
+                self.add_element(FreeSpace(self.L))
+                self.add_element(ThinLens(self.eyepiece_focal_length), material=material_eyepiece)

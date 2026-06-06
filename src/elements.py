@@ -55,7 +55,7 @@ class Doublet:
         self.n1 = n1
         self.n2 = n2
     def matrix(self):        # Calculate the transfer matrix for the doublet using the provided parameters
-        return doublet_matrix(self.R1, self.R2, self.R3, self.d1, self.d2, self.n1, self.n2)
+        return doublet_matrix(1, self.n1, self.n2, self.R1, self.R2, self.R3, self.d1, self.d2)
     def focal_length(self):  # Calculate the focal length of the doublet using the transfer matrix
         return 1 / (-self.matrix()[1,0])
     
@@ -97,3 +97,14 @@ class FreeSpace:
         self.n = n
     def matrix(self):       # Calculate the transfer matrix for free space using the provided distance and refractive index
         return translation_matrix(self.d, self.n)
+
+class Eye:
+    def __init__(self, f_eye=17, n_eye=1.336):
+        '''
+        f_eye : float - Focal length of the eye's lens system (default is 17 mm)
+        n_eye : float - Refractive index of the eye's lens system (default is 1.336 for the human eye)
+        '''
+        self.f_eye = f_eye
+        self.n_eye = n_eye
+    def matrix(self):       # Calculate the transfer matrix for the eye using the provided focal length and refractive index
+        return thin_lens_transfer_matrix(self.f_eye)
