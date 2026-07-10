@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.ma import sqrt
 from src.refractive_idxs import *
 from src.matrix_formation import *
 
@@ -53,13 +54,15 @@ def image_infinity_to_rays(image_array, channel=0):
     height, width, channels = image_array.shape
     cx = width / 2  # Calculate the center x-coordinate of the image
     cy = height / 2  # Calculate the center y-coordinate of the image
+    cmin = min(cx, cy)  # Determine the maximum center coordinate for normalization
     for i in range(height):
         for j in range(width):
             intensity = image_array[i, j, channel]  # Assuming the first channel represents intensity
             if intensity > 0:  # Only consider pixels with non-zero intensity
-                anglex = (j - cx) / cx
-                angley = (i - cy) / cy
-                rays.append((anglex, angley, intensity))  # Append the ray with its intensity for further processing
+                anglex = (j - cx) / cmin
+                angley = (i - cy) / cmin
+                if abs(anglex) <= 1 and abs(angley) <= 1 and sqrt(anglex**2 + angley**2) <= 1:  # Ensure the angles are within the valid range
+                    rays.append((anglex, angley, intensity))  # Append the ray with its intensity for further processing
     return rays, cx, cy
 
 def rays_to_image(rays, pixel_size):
@@ -109,15 +112,16 @@ def rays_to_image_infinity(rays, cx, cy):
     Returns:
     image_array : 2D numpy array - The resulting image array where each pixel value is the sum of intensities from rays that fall into that pixel.
     '''
+    cmin = min(cx, cy)  # Determine the minimum center coordinate for normalization
     max_ux = max(abs(ray[0]) for ray in rays)
     max_uy = max(abs(ray[1]) for ray in rays)
-    j_max = (int(np.ceil(max_ux * cx + cx)) + 1) * 2  # Calculate the maximum pixel index for x-direction
-    i_max = (int(np.ceil(max_uy * cy + cy)) + 1) * 2  # Calculate the maximum pixel index for y-direction
+    j_max = (int(np.ceil(max_ux * cmin + cmin)) + 1) * 2  # Calculate the maximum pixel index for x-direction
+    i_max = (int(np.ceil(max_uy * cmin + cmin)) + 1) * 2  # Calculate the maximum pixel index for y-direction
     image_array = np.zeros((i_max, j_max), dtype=np.float32)  # Initialize the image array with zeros
     for ray in rays:
         ux_out, uy_out, intensity = ray
-        x = int((ux_out + 1) * cx) + j_max // 2  # Convert angle back to pixel index for x-coordinate
-        y = int((uy_out + 1) * cy) + i_max // 2  # Convert angle back to pixel index for y-coordinate
+        x = int((ux_out + 1) * cmin) + j_max // 2  # Convert angle back to pixel index for x-coordinate
+        y = int((uy_out + 1) * cmin) + i_max // 2  # Convert angle back to pixel index for y-coordinate
         if 0 <= y < image_array.shape[0] and 0 <= x < image_array.shape[1]:  # Ensure the indices are within the bounds of the image array
             image_array[y, x] += intensity  # Add the intensity of the ray to the corresponding pixel
     # Cut empty rows and columns from the image array to focus on the area where rays are present
