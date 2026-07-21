@@ -123,14 +123,10 @@ class OpticalSystem:
             output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G] 
             output_rays_B = [self.single_ray_transfer(ray, self.MB) for ray in rays_B]  
             
-            h_imgR = abs(self.MR[0,0]) * object.height
-            h_imgG = abs(self.MG[0,0]) * object.height
-            h_imgB = abs(self.MB[0,0]) * object.height
+            output_image_array_R = rays_to_image(output_rays_R, pixel_size, M=self.MR, Obj_height=object.height)
+            output_image_array_G = rays_to_image(output_rays_G, pixel_size, M=self.MG, Obj_height=object.height)
+            output_image_array_B = rays_to_image(output_rays_B, pixel_size, M=self.MB, Obj_height=object.height)
 
-            output_image_array_R = rays_to_image_object(output_rays_R, pixel_size, h_imgR)
-            output_image_array_G = rays_to_image_object(output_rays_G, pixel_size, h_imgG) 
-            output_image_array_B = rays_to_image_object(output_rays_B, pixel_size, h_imgB) 
-            
             target_h = max(output_image_array_R.shape[0], output_image_array_G.shape[0], output_image_array_B.shape[0])
             target_w = max(output_image_array_R.shape[1], output_image_array_G.shape[1], output_image_array_B.shape[1])
 
@@ -160,10 +156,8 @@ class OpticalSystem:
             rays = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays]
             rays = [ray for ray in rays if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
             output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
-            h_img = abs(self.M[0,0]) * object.height
-            w_img = h_img * (object.image_array.shape[1] / object.image_array.shape[0])  # Calculate the width of the image based on the aspect ratio of the original image
             pixel_size = pixel_size
-            output_image_array = rays_to_image(output_rays, pixel_size=pixel_size)  
+            output_image_array = rays_to_image(output_rays, pixel_size=pixel_size, M=self.M, Obj_height=object.height)  
 
             if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
                 interpolated_image_array = griddata(np.argwhere(output_image_array>min_intensity), output_image_array[output_image_array>min_intensity], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  
@@ -227,6 +221,18 @@ class OpticalSystem:
             interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(image_array)  
             interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8) 
             return interpolated_image_array  # Return the interpolated image array after processing through the system
+        
+    def image_select(self, pixel_size=None, type='infinity', image_array=None, object=None, pupil_radius=None, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
+        if type == 'infinity':
+            if interpolation:
+                return self.image_with_interpolation(image_array, pixel_size, infinity=True)
+            else:
+                return self.image_infinity(image_array)
+        elif type == 'object':
+            return self.image_object(object, pupil_radius, pixel_size, n_rays_per_pixel, interpolation=interpolation, min_intensity=min_intensity)  
+        else:
+            print("Invalid type specified. Please choose 'infinity' or 'object'.")
+            return 
 
 class GalileanTelescope(OpticalSystem):
     def __init__(self, f1=100, f2=-20, lens1=None, lens2=None, magnification=None, color=False, material1=['NBK7'], material2=['NBK7']):
