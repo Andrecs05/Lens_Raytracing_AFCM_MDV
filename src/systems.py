@@ -104,7 +104,7 @@ class OpticalSystem:
             output_image_array = rays_to_image(output_rays, pixel_size)  
             return output_image_array  # Return the resulting image array after processing through the system
         
-    def image_object(self, object, pupil_radius, pixel_size, n_rays_per_pixel=7, interpolation=False):
+    def image_object(self, object, pupil_radius, pixel_size, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
         if self.color:  # If the system is set to handle color, process the object for each color channel separately
             rays_R = object_rays(object, pupil_radius, n_rays_per_pixel, channel=0) 
             rays_G = object_rays(object, pupil_radius, n_rays_per_pixel, channel=1)  
@@ -166,7 +166,7 @@ class OpticalSystem:
             output_image_array = rays_to_image(output_rays, pixel_size=pixel_size)  
 
             if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
-                interpolated_image_array = griddata(np.argwhere(output_image_array>30), output_image_array[output_image_array>30], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  
+                interpolated_image_array = griddata(np.argwhere(output_image_array>min_intensity), output_image_array[output_image_array>min_intensity], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  
                 interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(object.image_array)  
                 interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8) 
                 return interpolated_image_array  # Return the interpolated image array after processing through the system
