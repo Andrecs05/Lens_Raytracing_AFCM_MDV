@@ -1,5 +1,6 @@
 import numpy as np
 from .matrix_formation import *
+from .utilities import *
 
 class ThickLens:
     def __init__(self, R1, R2, d, n):
@@ -108,3 +109,14 @@ class Eye:
         self.n_eye = n_eye
     def matrix(self):       # Calculate the transfer matrix for the eye using the provided focal length and refractive index
         return thin_lens_transfer_matrix(self.f_eye)
+    
+class Object:
+    def __init__(self, image_array, distance, height):
+        '''
+        image_array : 2D numpy array - The image array representing the object
+        distance : float - Distance of the object from the optical system
+        height : float - Height of the object
+        '''
+        self.image_array = image_array
+        self.distance = distance
+        self.height = height

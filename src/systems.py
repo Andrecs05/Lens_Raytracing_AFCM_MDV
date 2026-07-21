@@ -74,7 +74,7 @@ class OpticalSystem:
             ray_out_y = matrix @ ray_in_y
             output_ray = (ray_out_x[1], ray_out_y[1], intensity)
             return output_ray
-
+        
     def image(self, image_array, pixel_size):
         if self.color:  # If the system is set to handle color, process the image for each color channel separately
             rays_R = image_to_rays_0_angle(image_array, pixel_size, channel=0) 
@@ -102,6 +102,75 @@ class OpticalSystem:
             rays = image_to_rays_0_angle(image_array, pixel_size)  
             output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
             output_image_array = rays_to_image(output_rays, pixel_size)  
+            return output_image_array  # Return the resulting image array after processing through the system
+        
+    def image_object(self, object, pupil_radius, pixel_size, n_rays_per_pixel=7, interpolation=False):
+        if self.color:  # If the system is set to handle color, process the object for each color channel separately
+            rays_R = object_rays(object, pupil_radius, n_rays_per_pixel, channel=0) 
+            rays_G = object_rays(object, pupil_radius, n_rays_per_pixel, channel=1)  
+            rays_B = object_rays(object, pupil_radius, n_rays_per_pixel, channel=2)
+
+            initial_propagation = FreeSpace(object.distance)
+ 
+            rays_R = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays_R]
+            rays_R = [ray for ray in rays_R if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            rays_G = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays_G]
+            rays_G = [ray for ray in rays_G if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            rays_B = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays_B]
+            rays_B = [ray for ray in rays_B if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            
+            output_rays_R = [self.single_ray_transfer(ray, self.MR) for ray in rays_R] 
+            output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G] 
+            output_rays_B = [self.single_ray_transfer(ray, self.MB) for ray in rays_B]  
+            
+            h_imgR = abs(self.MR[0,0]) * object.height
+            h_imgG = abs(self.MG[0,0]) * object.height
+            h_imgB = abs(self.MB[0,0]) * object.height
+
+            output_image_array_R = rays_to_image_object(output_rays_R, pixel_size, h_imgR)
+            output_image_array_G = rays_to_image_object(output_rays_G, pixel_size, h_imgG) 
+            output_image_array_B = rays_to_image_object(output_rays_B, pixel_size, h_imgB) 
+            
+            target_h = max(output_image_array_R.shape[0], output_image_array_G.shape[0], output_image_array_B.shape[0])
+            target_w = max(output_image_array_R.shape[1], output_image_array_G.shape[1], output_image_array_B.shape[1])
+
+            output_image_array_R = pad_to_shape(output_image_array_R, target_h, target_w)
+            output_image_array_G = pad_to_shape(output_image_array_G, target_h, target_w)
+            output_image_array_B = pad_to_shape(output_image_array_B, target_h, target_w)
+            
+            output_image_array = np.stack((output_image_array_R, output_image_array_G, output_image_array_B), axis=-1)  
+
+            if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
+                interpolated_image_array_R = griddata(np.argwhere(output_image_array[:,:,0]>0), output_image_array[:,:,0][output_image_array[:,:,0]>0], (np.indices(output_image_array[:,:,0].shape)[0], np.indices(output_image_array[:,:,0].shape)[1]), method='cubic', fill_value=0) 
+                interpolated_image_array_G = griddata(np.argwhere(output_image_array[:,:,1]>0), output_image_array[:,:,1][output_image_array[:,:,1]>0], (np.indices(output_image_array[:,:,1].shape)[0], np.indices(output_image_array[:,:,1].shape)[1]), method='cubic', fill_value=0)  
+                interpolated_image_array_B = griddata(np.argwhere(output_image_array[:,:,2]>0), output_image_array[:,:,2][output_image_array[:,:,2]>0], (np.indices(output_image_array[:,:,2].shape)[0], np.indices(output_image_array[:,:,2].shape)[1]), method='cubic', fill_value=0)  
+                
+                interpolated_image_array_R = (interpolated_image_array_R / np.max(interpolated_image_array_R)) * np.max(object.image_array[:,:,0]) 
+                interpolated_image_array_G = (interpolated_image_array_G / np.max(interpolated_image_array_G)) * np.max(object.image_array[:,:,1])  
+                interpolated_image_array_B = (interpolated_image_array_B / np.max(interpolated_image_array_B)) * np.max(object.image_array[:,:,2])
+                
+                interpolated_image_array_R = np.clip(interpolated_image_array_R, 0, 255).astype(np.uint8)
+                interpolated_image_array_G = np.clip(interpolated_image_array_G, 0, 255).astype(np.uint8)
+                interpolated_image_array_B = np.clip(interpolated_image_array_B, 0, 255).astype(np.uint8)
+                output_image_array = np.stack((interpolated_image_array_R, interpolated_image_array_G, interpolated_image_array_B), axis=-1)
+            return output_image_array  # Return the resulting image array after processing through the system
+        else:
+            rays = object_rays(object, pupil_radius, n_rays_per_pixel)
+            initial_propagation = FreeSpace(object.distance)
+            rays = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays]
+            rays = [ray for ray in rays if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
+            h_img = abs(self.M[0,0]) * object.height
+            w_img = h_img * (object.image_array.shape[1] / object.image_array.shape[0])  # Calculate the width of the image based on the aspect ratio of the original image
+            pixel_size = pixel_size
+            output_image_array = rays_to_image(output_rays, pixel_size=pixel_size)  
+
+            if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
+                interpolated_image_array = griddata(np.argwhere(output_image_array>30), output_image_array[output_image_array>30], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  
+                interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(object.image_array)  
+                interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8) 
+                return interpolated_image_array  # Return the interpolated image array after processing through the system
+
             return output_image_array  # Return the resulting image array after processing through the system
 
     def image_infinity(self, image_array):

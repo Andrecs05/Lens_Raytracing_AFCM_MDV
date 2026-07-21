@@ -65,6 +65,38 @@ def image_infinity_to_rays(image_array, channel=0):
                     rays.append((anglex, angley, intensity))  # Append the ray with its intensity for further processing
     return rays, cx, cy
 
+def object_rays(object, pupil_radius, n_rays_per_pixel, channel=0):
+    d_obj = object.distance 
+    h_obj = object.height 
+    array = object.image_array  
+    try:
+        height, width, channels = array.shape  
+    except ValueError:
+        height, width = array.shape
+
+    pixel_size = h_obj / array.shape[0]  
+    theta_half_width = np.arctan(pupil_radius / d_obj) * 0.2  # half-angle of the cone
+    weight = 1 / n_rays_per_pixel  
+    rays = []
+    for i in range(height):
+        for j in range(width):
+            try:
+                intensity = array[i, j, channel] * weight
+            except IndexError:
+                intensity = array[i, j] * weight
+            if intensity > 0:  
+                x = (j - width / 2) * pixel_size  
+                y = (i - height / 2) * pixel_size  
+                theta_chief = np.arctan(np.sqrt(x**2 + y**2) / d_obj)  # chief ray angle
+                #thetas = np.concatenate(([0], [theta_chief], theta_chief + np.linspace(-theta_half_width, theta_half_width, n_rays_per_pixel - 2)))  # include 0 angle and random angles within the cone
+                thetas = np.concatenate(([0], [theta_chief], theta_chief + np.random.uniform(-theta_half_width, theta_half_width, n_rays_per_pixel - 2)))  # include 0 angle and random angles within the cone
+                thetas = thetas
+                for theta in thetas:
+                    rays.append((x, y, theta, intensity))
+    return rays
+
+
+
 def rays_to_image(rays, pixel_size):
     '''
     Convert a list of rays back into a 2D image array.
@@ -96,6 +128,61 @@ def rays_to_image(rays, pixel_size):
             image_array[i, j] += intensity  # Add the intensity of the ray to the corresponding pixel
     # Normalize the image array to the range [0, 255] for visualization purposes
     image_array = (image_array / np.max(image_array) * 255).astype(np.uint8)
+    return image_array
+
+def rays_to_image_object(rays, pixel_size, h_img, w_img):
+    """
+    Splat rays into an image using bilinear accumulation + hit-count normalization.
+
+    Parameters:
+    rays : list of (x, y, angle, intensity) tuples, in physical units (mm),
+           centered on the optical axis (x=0, y=0 is image center).
+    pixel_size : float - physical size of each pixel (mm/pixel).
+    h_img : float - physical height of the image plane (mm), from |m| * h_obj.
+    w_img : float - physical width of the image plane (mm).
+
+    Returns:
+    image_array : 2D (or 3D if color) uint8 array, gamma-encoded for display.
+    """
+    height = int(np.ceil(h_img / pixel_size))
+    width  = int(np.ceil(w_img / pixel_size))
+
+    accum = np.zeros((height, width), dtype=np.float64)
+    hits  = np.zeros((height, width), dtype=np.float64)
+
+    for x, y, angle, intensity in rays:
+        # shift from optical-axis-centered coords to array coords
+        col_f = (x + w_img / 2) / pixel_size
+        row_f = (y + h_img / 2) / pixel_size
+
+        col0, row0 = int(np.floor(col_f)), int(np.floor(row_f))
+        dc, dr = col_f - col0, row_f - row0
+
+        for (rr, cc, frac) in [
+            (row0,   col0,   (1 - dr) * (1 - dc)),
+            (row0,   col0+1, (1 - dr) * dc),
+            (row0+1, col0,   dr * (1 - dc)),
+            (row0+1, col0+1, dr * dc),
+        ]:
+            if 0 <= rr < height and 0 <= cc < width and frac > 0:
+                accum[rr, cc] += intensity * frac
+                hits[rr, cc]  += frac
+
+    # average radiance per pixel, not raw accumulated energy
+    image_linear = np.divide(accum, hits, out=np.zeros_like(accum), where=hits > 0)
+
+    # normalize to [0,1] based on the actual max radiance present (not a fixed cap)
+    if image_linear.max() > 0:
+        image_linear = image_linear / image_linear.max()
+
+    # linear -> sRGB gamma encoding before casting to display range
+    image_srgb = np.where(
+        image_linear <= 0.0031308,
+        image_linear * 12.92,
+        1.055 * (image_linear ** (1/2.4)) - 0.055,
+    )
+
+    image_array = (np.clip(image_srgb, 0, 1) * 255).astype(np.uint8)
     return image_array
 
 def rays_to_image_infinity(rays, cx, cy):
