@@ -100,7 +100,9 @@ def object_rays(object, pupil_radius, n_rays_per_pixel, channel=0):
 
 
 
-def rays_to_image(rays, pixel_size, M=None, Obj_height=None):
+
+
+def rays_to_image(rays, pixel_size=None, M=None, Obj_height=None, sensor=None):
     '''
     Convert a list of rays back into a 2D image array.
     
@@ -117,10 +119,14 @@ def rays_to_image(rays, pixel_size, M=None, Obj_height=None):
     '''
     # Determine the size of the image based on the magnification
     Mag = abs(M[0, 0]) if M is not None else 1  # Use the magnification from the transfer matrix if provided
-    if Obj_height is not None:
-        max_r = int(np.ceil(Obj_height * Mag / pixel_size)) + 1  # Calculate the height of the image array based on object height and magnification
-        width = max_r
-        height = max_r
+    if Obj_height is not None or sensor is not None:
+        if sensor is not None:
+            pixel_size = sensor.pixel_size
+            width, height = sensor.resolution
+        else:
+            max_r = int(np.ceil(Obj_height * Mag / pixel_size)) + 1  # Calculate the height of the image array based on object height and magnification
+            width = max_r
+            height = max_r
         image_array = np.zeros((height, width), dtype=np.float32)  # Initialize the image array with zeros
         for ray in rays:
             x_centered, y_centered, angle, intensity = ray
@@ -128,7 +134,7 @@ def rays_to_image(rays, pixel_size, M=None, Obj_height=None):
             y = y_centered + (height * pixel_size) / 2  # Adjust y-coordinate back to image space
             j = int(x / pixel_size)  # Calculate the pixel index for x-coordinate
             i = int(y / pixel_size)  # Calculate the pixel index for y-coordinate
-            if sqrt((x - (width * pixel_size) / 2)**2 + (y - (height * pixel_size) / 2)**2) <= (max_r * pixel_size) / 2:  # Ensure the indices are within the bounds of the image array
+            if 0 <= i < height and 0 <= j < width:  # Ensure the indices are within the bounds of the image array
                 image_array[i, j] += intensity  # Add the intensity of the ray to the corresponding pixel
     else:
         max_x = max(ray[0] for ray in rays)

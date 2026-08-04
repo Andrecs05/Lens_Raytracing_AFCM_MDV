@@ -120,3 +120,12 @@ class Object:
         self.image_array = image_array
         self.distance = distance
         self.height = height
+
+class Sensor:
+    def __init__(self, pixel_size, resolution):
+        '''
+        pixel_size : float - Size of each pixel in the sensor (in mm)
+        resolution : tuple - Resolution of the sensor as (width, height) in pixels
+        '''
+        self.pixel_size = pixel_size
+        self.resolution = resolution

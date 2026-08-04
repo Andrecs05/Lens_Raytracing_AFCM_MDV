@@ -14,14 +14,22 @@ class OpticalSystem:
             self.MG = np.eye(2) 
             self.MB = np.eye(2)  
             self.MRGB = [self.MR, self.MG, self.MB]  # List to hold the system matrices for each color
+            self.sensor = None
         else:
             self.M = np.eye(2)  # Initialize the system matrix for monochromatic light
+            self.sensor = None 
 
     def add_element(self, element, material=['NBK7']):
         if self.color:  # If the system is set to handle color, implement wavelength-dependent behavior here
-            update_elements_color(self, element, material)  # Update the system matrices for each color based on the new element and its material
+            if isinstance(element, Sensor):  # If the element is a thick lens, update the system matrices for each color based on the lens material
+                self.sensor = element
+            else:
+                update_elements_color(self, element, material)  # Update the system matrices for each color based on the new element and its material
         else:        
-            self.M = element.matrix() @ self.M  
+            if isinstance(element, Sensor):  # If the element is a sensor, store it for later use
+                self.sensor = element
+            else:
+                self.M = element.matrix() @ self.M  
 
     def focal_length(self):
         if self.color:  # If the system is set to handle color, calculate focal lengths for each color separately
@@ -104,7 +112,7 @@ class OpticalSystem:
             output_image_array = rays_to_image(output_rays, pixel_size)  
             return output_image_array  # Return the resulting image array after processing through the system
         
-    def image_object(self, object, pupil_radius, pixel_size, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
+    def image_object(self, object, pupil_radius, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
         if self.color:  # If the system is set to handle color, process the object for each color channel separately
             rays_R = object_rays(object, pupil_radius, n_rays_per_pixel, channel=0) 
             rays_G = object_rays(object, pupil_radius, n_rays_per_pixel, channel=1)  
@@ -123,9 +131,9 @@ class OpticalSystem:
             output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G] 
             output_rays_B = [self.single_ray_transfer(ray, self.MB) for ray in rays_B]  
             
-            output_image_array_R = rays_to_image(output_rays_R, pixel_size, M=self.MR, Obj_height=object.height)
-            output_image_array_G = rays_to_image(output_rays_G, pixel_size, M=self.MG, Obj_height=object.height)
-            output_image_array_B = rays_to_image(output_rays_B, pixel_size, M=self.MB, Obj_height=object.height)
+            output_image_array_R = rays_to_image(output_rays_R, M=self.MR, sensor=self.sensor)
+            output_image_array_G = rays_to_image(output_rays_G, M=self.MG, sensor=self.sensor)
+            output_image_array_B = rays_to_image(output_rays_B, M=self.MB, sensor=self.sensor)
 
             target_h = max(output_image_array_R.shape[0], output_image_array_G.shape[0], output_image_array_B.shape[0])
             target_w = max(output_image_array_R.shape[1], output_image_array_G.shape[1], output_image_array_B.shape[1])
@@ -156,8 +164,7 @@ class OpticalSystem:
             rays = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays]
             rays = [ray for ray in rays if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
             output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
-            pixel_size = pixel_size
-            output_image_array = rays_to_image(output_rays, pixel_size=pixel_size, M=self.M, Obj_height=object.height)  
+            output_image_array = rays_to_image(output_rays, M=self.M, sensor=self.sensor)  
 
             if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
                 interpolated_image_array = griddata(np.argwhere(output_image_array>min_intensity), output_image_array[output_image_array>min_intensity], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  
