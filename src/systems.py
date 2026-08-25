@@ -4,6 +4,43 @@ from src.utilities import *
 from src.refractive_idxs import *
 from src.matrix_formation import *
 from src.elements import *
+from scipy.ndimage import distance_transform_edt
+
+def _interpolate_sparse_channel(channel_array, min_intensity=0, fill_radius_px=3):
+    channel = channel_array.astype(np.float32)
+    valid_mask = channel > min_intensity
+
+    if np.count_nonzero(valid_mask) < 3:
+        return np.clip(channel, 0, 255).astype(np.uint8)
+
+    points = np.argwhere(valid_mask)
+    values = channel[valid_mask]
+    grid_y, grid_x = np.indices(channel.shape)
+
+    interpolated = griddata(
+        points,
+        values,
+        (grid_y, grid_x),
+        method="linear",
+        fill_value=0.0,
+    )
+
+    interpolated = np.clip(interpolated, 0, None)
+
+    distance = distance_transform_edt(~valid_mask)
+    interpolated[distance > fill_radius_px] = 0.0
+
+    input_values = channel[channel > min_intensity]
+    output_values = interpolated[interpolated > 0]
+
+    if input_values.size and output_values.size:
+        input_peak = np.percentile(input_values, 99)
+        output_peak = np.percentile(output_values, 99)
+
+        if output_peak > 0:
+            interpolated *= input_peak / output_peak
+
+    return np.clip(interpolated, 0, 255).astype(np.uint8)
 
 class OpticalSystem:
     def __init__(self, color=False):
@@ -144,18 +181,10 @@ class OpticalSystem:
             
             output_image_array = np.stack((output_image_array_R, output_image_array_G, output_image_array_B), axis=-1)  
 
-            if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
-                interpolated_image_array_R = griddata(np.argwhere(output_image_array[:,:,0]>0), output_image_array[:,:,0][output_image_array[:,:,0]>0], (np.indices(output_image_array[:,:,0].shape)[0], np.indices(output_image_array[:,:,0].shape)[1]), method='cubic', fill_value=0) 
-                interpolated_image_array_G = griddata(np.argwhere(output_image_array[:,:,1]>0), output_image_array[:,:,1][output_image_array[:,:,1]>0], (np.indices(output_image_array[:,:,1].shape)[0], np.indices(output_image_array[:,:,1].shape)[1]), method='cubic', fill_value=0)  
-                interpolated_image_array_B = griddata(np.argwhere(output_image_array[:,:,2]>0), output_image_array[:,:,2][output_image_array[:,:,2]>0], (np.indices(output_image_array[:,:,2].shape)[0], np.indices(output_image_array[:,:,2].shape)[1]), method='cubic', fill_value=0)  
-                
-                interpolated_image_array_R = (interpolated_image_array_R / np.max(interpolated_image_array_R)) * np.max(object.image_array[:,:,0]) 
-                interpolated_image_array_G = (interpolated_image_array_G / np.max(interpolated_image_array_G)) * np.max(object.image_array[:,:,1])  
-                interpolated_image_array_B = (interpolated_image_array_B / np.max(interpolated_image_array_B)) * np.max(object.image_array[:,:,2])
-                
-                interpolated_image_array_R = np.clip(interpolated_image_array_R, 0, 255).astype(np.uint8)
-                interpolated_image_array_G = np.clip(interpolated_image_array_G, 0, 255).astype(np.uint8)
-                interpolated_image_array_B = np.clip(interpolated_image_array_B, 0, 255).astype(np.uint8)
+            if interpolation:
+                interpolated_image_array_R = _interpolate_sparse_channel(output_image_array[:, :, 0], min_intensity=min_intensity)
+                interpolated_image_array_G = _interpolate_sparse_channel(output_image_array[:, :, 1], min_intensity=min_intensity)
+                interpolated_image_array_B = _interpolate_sparse_channel(output_image_array[:, :, 2], min_intensity=min_intensity)
                 output_image_array = np.stack((interpolated_image_array_R, interpolated_image_array_G, interpolated_image_array_B), axis=-1)
             return output_image_array  # Return the resulting image array after processing through the system
         else:
@@ -166,11 +195,8 @@ class OpticalSystem:
             output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
             output_image_array = rays_to_image(output_rays, M=self.M, sensor=self.sensor)  
 
-            if interpolation:  # If interpolation is requested, perform cubic interpolation on the output image array
-                interpolated_image_array = griddata(np.argwhere(output_image_array>min_intensity), output_image_array[output_image_array>min_intensity], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  
-                interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(object.image_array)  
-                interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8) 
-                return interpolated_image_array  # Return the interpolated image array after processing through the system
+            if interpolation:
+                return _interpolate_sparse_channel(output_image_array, min_intensity=min_intensity)
 
             return output_image_array  # Return the resulting image array after processing through the system
 
@@ -210,24 +236,13 @@ class OpticalSystem:
             output_image_array = self.image_infinity(image_array)
 
         if self.color:  # If the system is set to handle color, perform interpolation for each color channel separately
-            interpolated_image_array_R = griddata(np.argwhere(output_image_array[:,:,0]>0), output_image_array[:,:,0][output_image_array[:,:,0]>0], (np.indices(output_image_array[:,:,0].shape)[0], np.indices(output_image_array[:,:,0].shape)[1]), method='cubic', fill_value=0) 
-            interpolated_image_array_G = griddata(np.argwhere(output_image_array[:,:,1]>0), output_image_array[:,:,1][output_image_array[:,:,1]>0], (np.indices(output_image_array[:,:,1].shape)[0], np.indices(output_image_array[:,:,1].shape)[1]), method='cubic', fill_value=0)  
-            interpolated_image_array_B = griddata(np.argwhere(output_image_array[:,:,2]>0), output_image_array[:,:,2][output_image_array[:,:,2]>0], (np.indices(output_image_array[:,:,2].shape)[0], np.indices(output_image_array[:,:,2].shape)[1]), method='cubic', fill_value=0)  
-            
-            interpolated_image_array_R = (interpolated_image_array_R / np.max(interpolated_image_array_R)) * np.max(image_array[:,:,0]) 
-            interpolated_image_array_G = (interpolated_image_array_G / np.max(interpolated_image_array_G)) * np.max(image_array[:,:,1])  
-            interpolated_image_array_B = (interpolated_image_array_B / np.max(interpolated_image_array_B)) * np.max(image_array[:,:,2])
-            
-            interpolated_image_array_R = np.clip(interpolated_image_array_R, 0, 255).astype(np.uint8)
-            interpolated_image_array_G = np.clip(interpolated_image_array_G, 0, 255).astype(np.uint8)
-            interpolated_image_array_B = np.clip(interpolated_image_array_B, 0, 255).astype(np.uint8)
+            interpolated_image_array_R = _interpolate_sparse_channel(output_image_array[:, :, 0], min_intensity=0)
+            interpolated_image_array_G = _interpolate_sparse_channel(output_image_array[:, :, 1], min_intensity=0)
+            interpolated_image_array_B = _interpolate_sparse_channel(output_image_array[:, :, 2], min_intensity=0)
             interpolated_image_array = np.stack((interpolated_image_array_R, interpolated_image_array_G, interpolated_image_array_B), axis=-1)  # Combine the color channels into a single image array
             return interpolated_image_array  # Return the interpolated image array after processing through the system
         else:
-            interpolated_image_array = griddata(np.argwhere(output_image_array>0), output_image_array[output_image_array>0], (np.indices(output_image_array.shape)[0], np.indices(output_image_array.shape)[1]), method='cubic', fill_value=0)  # Perform cubic interpolation
-            interpolated_image_array = (interpolated_image_array / np.max(interpolated_image_array)) * np.max(image_array)  
-            interpolated_image_array = np.clip(interpolated_image_array, 0, 255).astype(np.uint8) 
-            return interpolated_image_array  # Return the interpolated image array after processing through the system
+            return _interpolate_sparse_channel(output_image_array, min_intensity=0)
         
     def image_select(self, pixel_size=None, type='infinity', image_array=None, object=None, pupil_radius=None, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
         if type == 'infinity':
@@ -236,7 +251,7 @@ class OpticalSystem:
             else:
                 return self.image_infinity(image_array)
         elif type == 'object':
-            return self.image_object(object, pupil_radius, pixel_size, n_rays_per_pixel, interpolation=interpolation, min_intensity=min_intensity)  
+            return self.image_object(object, pupil_radius, n_rays_per_pixel=n_rays_per_pixel, interpolation=interpolation, min_intensity=min_intensity)
         else:
             print("Invalid type specified. Please choose 'infinity' or 'object'.")
             return 

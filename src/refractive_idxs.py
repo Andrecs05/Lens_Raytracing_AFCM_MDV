@@ -23,6 +23,18 @@ def refractive_index(lambda_um, material):
         return refractive_index_BaF2(lambda_um)
     elif material == "CaF2":
         return refractive_index_CaF2(lambda_um)
+    elif material == "N_SF11":
+        return refractive_index_N_SF11(lambda_um)
+    elif material == "N_SF6":
+        return refractive_index_N_SF6(lambda_um)
+    elif material == "N_BAK4":
+        return refractive_index_N_BAK4(lambda_um)
+    elif material == "N_LAK22":
+        return refractive_index_N_LAK22(lambda_um)
+    elif material == "N_LAF21":
+        return refractive_index_N_LAF21(lambda_um)
+    elif material == "N_K5":
+        return refractive_index_N_K5(lambda_um)
     else:
         raise ValueError("Material not recognized")
 
@@ -232,6 +244,126 @@ def refractive_index_N_SF11(lambda_um):
     B1, C1 = 1.73759695, 0.013188707
     B2, C2 = 0.313747346, 0.0623068142
     B3, C3 = 1.89878101, 155.23629
+
+    n_squared = 1 + (
+        B1 * lambda_sq / (lambda_sq - C1) +
+        B2 * lambda_sq / (lambda_sq - C2) +
+        B3 * lambda_sq / (lambda_sq - C3)
+    )
+
+    return np.sqrt(n_squared)
+
+def refractive_index_N_SF6(lambda_um):
+    """
+    Calculates the refractive index n of N-SF6 using the Sellmeier equation.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm).
+
+    Returns:
+        n (float or ndarray): Refractive index of N-SF6.
+    """
+    lambda_sq = lambda_um**2
+
+    B1, C1 = 1.779317630, 0.013371418
+    B2, C2 = 0.338149866, 0.0617533621
+    B3, C3 = 2.087344740, 174.01759000
+
+    n_squared = 1 + (
+        B1 * lambda_sq / (lambda_sq - C1) +
+        B2 * lambda_sq / (lambda_sq - C2) +
+        B3 * lambda_sq / (lambda_sq - C3)
+    )
+
+    return np.sqrt(n_squared)
+
+def refractive_index_N_BAK4(lambda_um):
+    """
+    Calculates the refractive index n of N-BAK4 using the Sellmeier equation.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm).
+
+    Returns:
+        n (float or ndarray): Refractive index of N-BAK4.
+    """
+    lambda_sq = lambda_um**2
+
+    B1, C1 = 1.288346420, 0.007799806
+    B2, C2 = 0.132817724, 0.0315631177
+    B3, C3 = 0.945395373, 105.96587500
+
+    n_squared = 1 + (
+        B1 * lambda_sq / (lambda_sq - C1) +
+        B2 * lambda_sq / (lambda_sq - C2) +
+        B3 * lambda_sq / (lambda_sq - C3)
+    )
+
+    return np.sqrt(n_squared)
+
+def refractive_index_N_LAK22(lambda_um):
+    """
+    Calculates the refractive index n of N-LAK22 using the Sellmeier equation.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm).
+
+    Returns:
+        n (float or ndarray): Refractive index of N-LAK22.
+    """
+    lambda_sq = lambda_um**2
+
+    B1, C1 = 1.142297810, 0.005857786
+    B2, C2 = 0.535138441, 0.0198546147
+    B3, C3 = 1.040883850, 100.83401700
+
+    n_squared = 1 + (
+        B1 * lambda_sq / (lambda_sq - C1) +
+        B2 * lambda_sq / (lambda_sq - C2) +
+        B3 * lambda_sq / (lambda_sq - C3)
+    )
+
+    return np.sqrt(n_squared)
+
+def refractive_index_N_LAF21(lambda_um):
+    """
+    Calculates the refractive index n of N-LAF21 using the Sellmeier equation.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm).
+
+    Returns:
+        n (float or ndarray): Refractive index of N-LAF21.
+    """
+    lambda_sq = lambda_um**2
+
+    B1, C1 = 1.871345290, 0.009333223
+    B2, C2 = 0.250783010, 0.0345637762
+    B3, C3 = 1.220486390, 83.24048660
+
+    n_squared = 1 + (
+        B1 * lambda_sq / (lambda_sq - C1) +
+        B2 * lambda_sq / (lambda_sq - C2) +
+        B3 * lambda_sq / (lambda_sq - C3)
+    )
+
+    return np.sqrt(n_squared)
+
+def refractive_index_N_K5(lambda_um):
+    """
+    Calculates the refractive index n of N-K5 using the Sellmeier equation.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm).
+
+    Returns:
+        n (float or ndarray): Refractive index of N-K5.
+    """
+    lambda_sq = lambda_um**2
+
+    B1, C1 = 1.085118330, 0.006610995
+    B2, C2 = 0.199562005, 0.0241108660
+    B3, C3 = 0.930511663, 111.98277700
 
     n_squared = 1 + (
         B1 * lambda_sq / (lambda_sq - C1) +

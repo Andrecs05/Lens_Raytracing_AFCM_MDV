@@ -1,4 +1,5 @@
 import numpy as np
+import re
 from .matrix_formation import *
 from .utilities import *
 
@@ -122,10 +123,40 @@ class Object:
         self.height = height
 
 class Sensor:
-    def __init__(self, pixel_size, resolution):
+    def __init__(self, sensor_preset=None, pixel_size=None, resolution=None):
         '''
+        sensor_preset : str - Standard sensor preset option
         pixel_size : float - Size of each pixel in the sensor (in mm)
         resolution : tuple - Resolution of the sensor as (width, height) in pixels
         '''
-        self.pixel_size = pixel_size
-        self.resolution = resolution
+
+        if sensor_preset is not None:
+            preset = sensor_preset
+            if preset == 'Microscopy_SCMOS': # Andor Zyla 4.2
+                self.pixel_size = 0.0065
+                self.resolution = (2048, 2048)
+            elif preset == 'Microscopy_EMCCD': # Andor iXon Ultra 897
+                self.pixel_size = 0.013
+                self.resolution = (512, 512)
+            elif preset == 'Microscopy_CCD': # Andor iKon-M 934
+                self.pixel_size = 0.013
+                self.resolution = (1024, 1024)
+            elif preset == 'Astro_CCD': # Kodak KAF-8300
+                self.pixel_size = 0.0054
+                self.resolution = (3326, 2504)
+            elif preset == 'Astro_CMOS': # Sony IMX455
+                self.pixel_size = 0.00376
+                self.resolution = (9568, 6380)
+            elif preset.startswith('Ideal_square_') and preset.endswith('um'):
+                match = re.fullmatch(r'Ideal_square_(\d+(?:\.\d+)?)um', preset)
+                if match:
+                    self.pixel_size = float(match.group(1)) * 0.001
+                    self.resolution = (1000, 1000)
+            elif preset.startswith('Ideal_hd_') and preset.endswith('um'):
+                match = re.fullmatch(r'Ideal_hd_(\d+(?:\.\d+)?)um', preset)
+                if match:
+                    self.pixel_size = float(match.group(1)) * 0.001
+                    self.resolution = (1920, 1080)
+        else:
+            self.pixel_size = pixel_size
+            self.resolution = resolution

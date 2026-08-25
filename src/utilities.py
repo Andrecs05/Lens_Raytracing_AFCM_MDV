@@ -136,25 +136,72 @@ def rays_to_image(rays, pixel_size=None, M=None, Obj_height=None, sensor=None):
             i = int(y / pixel_size)  # Calculate the pixel index for y-coordinate
             if 0 <= i < height and 0 <= j < width:  # Ensure the indices are within the bounds of the image array
                 image_array[i, j] += intensity  # Add the intensity of the ray to the corresponding pixel
-    else:
-        max_x = max(ray[0] for ray in rays)
-        max_y = max(ray[1] for ray in rays)
-        width = int(np.ceil(max_x * 2/ pixel_size)) + 1  # Calculate the width of the image array
-        height = int(np.ceil(max_y * 2/ pixel_size)) + 1  # Calculate the height of the image array
-        image_array = np.zeros((height, width), dtype=np.float32)  # Initialize the image array with zeros
-        for ray in rays:
-            x_centered, y_centered, angle, intensity = ray
-            x = x_centered + (width * pixel_size) / 2  # Adjust x-coordinate back to image space
-            y = y_centered + (height * pixel_size) / 2  # Adjust y-coordinate back to image space
-            j = int(x / pixel_size)  # Calculate the pixel index for x-coordinate
-            i = int(y / pixel_size)  # Calculate the pixel index for y-coordinate
-            if 0 <= i < height and 0 <= j < width:  # Ensure the indices are within the bounds of the image array
-                image_array[i, j] += intensity  # Add the intensity of the ray to the corresponding pixel
+    # else:
+    #     max_x = max(ray[0] for ray in rays)
+    #     max_y = max(ray[1] for ray in rays)
+    #     width = int(np.ceil(max_x * 2/ pixel_size)) + 1  # Calculate the width of the image array
+    #     height = int(np.ceil(max_y * 2/ pixel_size)) + 1  # Calculate the height of the image array
+    #     image_array = np.zeros((height, width), dtype=np.float32)  # Initialize the image array with zeros
+    #     for ray in rays:
+    #         x_centered, y_centered, angle, intensity = ray
+    #         x = x_centered + (width * pixel_size) / 2  # Adjust x-coordinate back to image space
+    #         y = y_centered + (height * pixel_size) / 2  # Adjust y-coordinate back to image space
+    #         j = int(x / pixel_size)  # Calculate the pixel index for x-coordinate
+    #         i = int(y / pixel_size)  # Calculate the pixel index for y-coordinate
+    #         if 0 <= i < height and 0 <= j < width:  # Ensure the indices are within the bounds of the image array
+    #             image_array[i, j] += intensity  # Add the intensity of the ray to the corresponding pixel
 
+    else:
+        if len(rays) == 0:
+            return np.zeros((1, 1), dtype=np.uint8)
+        max_x = max(abs(ray[0]) for ray in rays)
+        max_y = max(abs(ray[1]) for ray in rays)
+        width = int(np.ceil(max_x * 2 / pixel_size)) + 2
+        height = int(np.ceil(max_y * 2 / pixel_size)) + 2
+
+    # float accumulation buffer
+    image_array = np.zeros((height, width), dtype=np.float32)
+
+    # Bilinear splat: each ray contributes to 4 neighboring pixels
+    for ray in rays:
+        x_centered, y_centered, angle, intensity = ray
+
+        u = (x_centered / pixel_size) + (width / 2.0)
+        v = (y_centered / pixel_size) + (height / 2.0)
+
+        j0 = int(np.floor(u))
+        i0 = int(np.floor(v))
+        du = u - j0
+        dv = v - i0
+
+        # neighbors and bilinear weights
+        nbrs = [
+            (i0,     j0,     (1 - du) * (1 - dv)),
+            (i0,     j0 + 1, du * (1 - dv)),
+            (i0 + 1, j0,     (1 - du) * dv),
+            (i0 + 1, j0 + 1, du * dv),
+        ]
+
+        for ii, jj, w in nbrs:
+            if 0 <= ii < height and 0 <= jj < width and w > 0:
+                image_array[ii, jj] += intensity * w
+
+    # Robust display normalization (avoids one outlier making whole image too dark)
+    nz = image_array[image_array > 0]
+    if nz.size == 0:
+        return np.zeros_like(image_array, dtype=np.uint8)
+
+    scale = np.percentile(nz, 99.5)
+    if scale <= 0:
+        return np.zeros_like(image_array, dtype=np.uint8)
+
+    image_array = np.clip(image_array / scale, 0, 1)
+    image_array = (image_array * 255).astype(np.uint8)
+    return image_array
     
     # Normalize the image array to the range [0, 255] for visualization purposes
-    image_array = (image_array / np.max(image_array) * 255).astype(np.uint8)
-    return image_array
+    # image_array = (image_array / np.max(image_array) * 255).astype(np.uint8)
+    # return image_array
 
 def rays_to_image_infinity(rays, cx, cy):
     '''
