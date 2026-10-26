@@ -149,20 +149,20 @@ class OpticalSystem:
             output_image_array = rays_to_image(output_rays, pixel_size)  
             return output_image_array  # Return the resulting image array after processing through the system
         
-    def image_object(self, object, pupil_radius, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
+    def image_object(self, object, aperture_radius, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
         if self.color:  # If the system is set to handle color, process the object for each color channel separately
-            rays_R = object_rays(object, pupil_radius, n_rays_per_pixel, channel=0) 
-            rays_G = object_rays(object, pupil_radius, n_rays_per_pixel, channel=1)  
-            rays_B = object_rays(object, pupil_radius, n_rays_per_pixel, channel=2)
+            rays_R = object_rays(object, aperture_radius, n_rays_per_pixel, channel=0) 
+            rays_G = object_rays(object, aperture_radius, n_rays_per_pixel, channel=1)  
+            rays_B = object_rays(object, aperture_radius, n_rays_per_pixel, channel=2)
 
             initial_propagation = FreeSpace(object.distance)
  
             rays_R = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays_R]
-            rays_R = [ray for ray in rays_R if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            rays_R = [ray for ray in rays_R if np.sqrt(ray[0]**2 + ray[1]**2) <= aperture_radius]  # Filter rays that are within the aperture radius
             rays_G = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays_G]
-            rays_G = [ray for ray in rays_G if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            rays_G = [ray for ray in rays_G if np.sqrt(ray[0]**2 + ray[1]**2) <= aperture_radius]  # Filter rays that are within the aperture radius
             rays_B = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays_B]
-            rays_B = [ray for ray in rays_B if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            rays_B = [ray for ray in rays_B if np.sqrt(ray[0]**2 + ray[1]**2) <= aperture_radius]  # Filter rays that are within the aperture radius
             
             output_rays_R = [self.single_ray_transfer(ray, self.MR) for ray in rays_R] 
             output_rays_G = [self.single_ray_transfer(ray, self.MG) for ray in rays_G] 
@@ -188,10 +188,10 @@ class OpticalSystem:
                 output_image_array = np.stack((interpolated_image_array_R, interpolated_image_array_G, interpolated_image_array_B), axis=-1)
             return output_image_array  # Return the resulting image array after processing through the system
         else:
-            rays = object_rays(object, pupil_radius, n_rays_per_pixel)
+            rays = object_rays(object, aperture_radius, n_rays_per_pixel)
             initial_propagation = FreeSpace(object.distance)
             rays = [self.single_ray_transfer(ray, initial_propagation.matrix()) for ray in rays]
-            rays = [ray for ray in rays if np.sqrt(ray[0]**2 + ray[1]**2) <= pupil_radius]  # Filter rays that are within the pupil radius
+            rays = [ray for ray in rays if np.sqrt(ray[0]**2 + ray[1]**2) <= aperture_radius]  # Filter rays that are within the aperture radius
             output_rays = [self.single_ray_transfer(ray, self.M) for ray in rays] 
             output_image_array = rays_to_image(output_rays, M=self.M, sensor=self.sensor)  
 
@@ -244,14 +244,14 @@ class OpticalSystem:
         else:
             return _interpolate_sparse_channel(output_image_array, min_intensity=0)
         
-    def image_select(self, pixel_size=None, type='infinity', image_array=None, object=None, pupil_radius=None, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
+    def image_select(self, pixel_size=None, type='infinity', image_array=None, object=None, aperture_radius=None, n_rays_per_pixel=7, interpolation=False, min_intensity=30):
         if type == 'infinity':
             if interpolation:
                 return self.image_with_interpolation(image_array, pixel_size, infinity=True)
             else:
                 return self.image_infinity(image_array)
         elif type == 'object':
-            return self.image_object(object, pupil_radius, n_rays_per_pixel=n_rays_per_pixel, interpolation=interpolation, min_intensity=min_intensity)
+            return self.image_object(object, aperture_radius, n_rays_per_pixel=n_rays_per_pixel, interpolation=interpolation, min_intensity=min_intensity)
         else:
             print("Invalid type specified. Please choose 'infinity' or 'object'.")
             return 
@@ -330,3 +330,10 @@ class BrightFieldMicroscope(OpticalSystem):
                 self.add_element(ThinLens(self.objective_focal_length), material=material_objective)
                 self.add_element(FreeSpace(self.L))
                 self.add_element(ThinLens(self.eyepiece_focal_length), material=material_eyepiece)
+
+def thin_lens_system(f, d_sensor, sensor):
+    system = OpticalSystem(color=False)
+    system.add_element(ThinLens(f))
+    system.add_element(FreeSpace(d=d_sensor))
+    system.add_element(sensor)
+    return system

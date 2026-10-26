@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.ma import sqrt
+from skimage.filters import laplace
 from src.refractive_idxs import *
 from src.matrix_formation import *
 
@@ -65,7 +66,7 @@ def image_infinity_to_rays(image_array, channel=0):
                     rays.append((anglex, angley, intensity))  # Append the ray with its intensity for further processing
     return rays, cx, cy
 
-def object_rays(object, pupil_radius, n_rays_per_pixel, channel=0):
+def object_rays(object, aperture_radius, n_rays_per_pixel, channel=0):
     d_obj = object.distance 
     h_obj = object.height 
     array = object.image_array  
@@ -75,7 +76,7 @@ def object_rays(object, pupil_radius, n_rays_per_pixel, channel=0):
         height, width = array.shape
 
     pixel_size = h_obj / array.shape[0]  
-    theta_half_width = np.arctan(pupil_radius / d_obj) * 0.5  # half-angle of the cone
+    theta_half_width = np.arctan(aperture_radius / d_obj) * 0.5  # half-angle of the cone
     weight = 1 / n_rays_per_pixel  
     rays = []
     for i in range(height):
@@ -309,3 +310,73 @@ def update_elements_color(system, element, material=None):
     else:
                 raise ValueError("Element type not recognized")
     return
+
+def focal_distances(M):
+    '''
+    Focal data of an element or system in air from its ABCD matrix.
+
+    Returns:
+    f   : float - Effective focal length
+    ffd : float - Front focal distance, measured from the first vertex
+    bfd : float - Back focal distance, measured from the last vertex
+    '''
+    A, B, C, D = M.ravel()
+    f = -1 / C
+    return f, D * f, A * f
+
+def stripe_edges(profile):
+    '''Subpixel edges of a bright stripe: first rising and last falling crossing at 50 % of the maximum.'''
+    p = profile.astype(np.float32)
+    half = 0.5 * p.max()
+    idx = np.where(p > half)[0]
+    if idx.size == 0:
+        return np.nan, np.nan
+    i0, i1 = idx[0], idx[-1]
+    left  = i0 - 1 + (half - p[i0-1]) / (p[i0] - p[i0-1]) if i0 > 0 else float(i0)
+    right = i1 + (p[i1] - half) / (p[i1] - p[i1+1]) if i1 < p.size - 1 else float(i1)
+    return left, right
+
+def obj_to_sensor_px(i, j, M, obj_shape, p_obj, sensor):
+    '''Sensor position (row, column) of object pixel (i, j) for a lateral magnification M.
+    Uses the same centring convention as object_rays and rays_to_image.'''
+    H_o, W_o = obj_shape[:2]
+    W_s, H_s = sensor.resolution
+    x = (j - W_o/2) * p_obj
+    y = (i - H_o/2) * p_obj
+    return M*y/sensor.pixel_size + H_s/2, M*x/sensor.pixel_size + W_s/2
+
+def measured_size_px(img, frac=0.5):
+    """Height and width (in pixels) of the illuminated region, with edges at frac × peak brightness.
+    Uses the mean brightness of each row/column, so a few stray pixels can't move the edge."""
+    img = img.astype(np.float32)
+    sizes = []
+    for axis in (1, 0):                                   # axis=1 -> row profile (height), axis=0 -> column profile (width)
+        profile = img.mean(axis=axis)
+        lit = np.where(profile > frac * profile.max())[0]
+        sizes.append(0 if lit.size == 0 else lit[-1] - lit[0] + 1)
+    return sizes                                          # [height_px, width_px]
+
+
+
+
+
+def object_box_to_sensor(rows, cols, M, obj_shape, p_obj, sensor, margin=0):
+    """Sensor pixel box (r0, r1, c0, c1) containing the object pixel box rows=(i0, i1), cols=(j0, j1).
+    Same centring as object_rays / rays_to_image; handles M < 0 (inverted image) and clips to the sensor."""
+    H_o, W_o = obj_shape[:2]
+    W_s, H_s = sensor.resolution
+    y = (np.array(rows) - H_o/2) * p_obj
+    x = (np.array(cols) - W_o/2) * p_obj
+    r = np.sort(M * y / sensor.pixel_size + H_s/2)
+    c = np.sort(M * x / sensor.pixel_size + W_s/2)
+    return (int(max(np.floor(r[0]) - margin, 0)), int(min(np.ceil(r[1]) + 1 + margin, H_s)),
+            int(max(np.floor(c[0]) - margin, 0)), int(min(np.ceil(c[1]) + 1 + margin, W_s)))
+
+def sharpness(img, region=None):
+    """Variance of the Laplacian (higher = sharper), optionally only inside region = (r0, r1, c0, c1).
+    The Laplacian is computed on the full image and then cropped, so the region border adds no false edges."""
+    lap = laplace(img.astype(np.float32))
+    if region is not None:
+        r0, r1, c0, c1 = region
+        lap = lap[r0:r1, c0:c1]
+    return lap.var()
