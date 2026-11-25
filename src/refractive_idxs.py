@@ -67,6 +67,10 @@ def refractive_index(lambda_um, material):
         return refractive_index_BASF6(lambda_um)
     elif material == "KZFH1":
         return refractive_index_KZFH1(lambda_um)
+    elif material == "SF5":
+        return refractive_index_SF5(lambda_um)
+    elif material == "SF2":
+        return refractive_index_SF2(lambda_um)
     else:
         raise ValueError("Material not recognized")
 
@@ -930,4 +934,47 @@ def refractive_index_KZFH1(lambda_um):
         A5 / lambda_sq**4
     )
     
+    return np.sqrt(n_squared)
+
+def refractive_index_SF5(lambda_um):
+    """
+    Calculates the refractive index n of SCHOTT SF5 (lead flint, nd = 1.6727, Vd = 32.2) using the Sellmeier equation.
+    Flint element of the Thorlabs AC050-010-A achromatic doublet.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm)
+
+    Returns:
+        n (float or ndarray): Refractive index
+    """
+    B1, C1 = 1.46141885, 0.0111826126
+    B2, C2 = 0.247713019, 0.0508594669
+    B3, C3 = 0.949995832, 112.041888
+
+    lambda_sq = lambda_um ** 2
+    n_squared = 1 + (B1 * lambda_sq) / (lambda_sq - C1) \
+                  + (B2 * lambda_sq) / (lambda_sq - C2) \
+                  + (B3 * lambda_sq) / (lambda_sq - C3)
+    return np.sqrt(n_squared)
+
+
+def refractive_index_SF2(lambda_um):
+    """
+    Calculates the refractive index n of SCHOTT SF2 (lead flint, nd = 1.6477, Vd = 33.8) using the Sellmeier equation.
+    Flint element of the Thorlabs AC254-400-A achromatic doublet.
+
+    Args:
+        lambda_um (float or ndarray): Wavelength in micrometers (µm)
+
+    Returns:
+        n (float or ndarray): Refractive index
+    """
+    B1, C1 = 1.40301821, 0.0105795466
+    B2, C2 = 0.231767504, 0.0493226978
+    B3, C3 = 0.939056586, 112.405955
+
+    lambda_sq = lambda_um ** 2
+    n_squared = 1 + (B1 * lambda_sq) / (lambda_sq - C1) \
+                  + (B2 * lambda_sq) / (lambda_sq - C2) \
+                  + (B3 * lambda_sq) / (lambda_sq - C3)
     return np.sqrt(n_squared)
